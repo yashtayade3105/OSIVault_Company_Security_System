@@ -63,6 +63,7 @@ where = ["."]
 include = ["osivault*"]
 
 [tool.pytest.ini_options]
-django_settings_module = "tests.settings"
+DJANGO_SETTINGS_MODULE = "tests.settings"
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v --tb=short"
