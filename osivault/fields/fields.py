@@ -43,6 +43,15 @@ class EncryptedTextField(models.TextField):
         return super().to_python(value)
 
 
+class EncryptedCharField(EncryptedTextField):
+    """
+    Django CharField subclass for encrypted text with optional blind index search hashing.
+    """
+    def __init__(self, *args, search_hash=False, **kwargs):
+        self.search_hash = search_hash
+        super().__init__(*args, **kwargs)
+
+
 class EncryptedJSONField(models.TextField):
     """
     Django model field for encrypting JSON data structures at rest.
