@@ -1281,10 +1281,11 @@
           <div class="flex items-center gap-2">
             <!-- Rows Per Page Limit Selector -->
             <select id="rowsLimitSelect" onchange="changeRowsLimit(this.value)" class="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-200 focus:outline-none focus:border-emerald-500 cursor-pointer">
-              <option value="100">100 Rows/Page</option>
+              <option value="50">50 Rows/Page</option>
+              <option value="100" selected>100 Rows/Page</option>
+              <option value="250">250 Rows/Page</option>
               <option value="500">500 Rows/Page</option>
               <option value="1000">1000 Rows/Page</option>
-              <option value="0">All Rows</option>
             </select>
 
             <!-- Auto-Sync Polling Interval Selector -->
@@ -1302,6 +1303,51 @@
             <button onclick="openExportModal()" class="px-4 py-2 text-xs font-extrabold bg-slate-900 hover:bg-slate-800 text-cyan-300 border border-cyan-500/40 hover:border-cyan-400 rounded-xl shadow-lg flex items-center gap-2 transition cursor-pointer">
               <i data-lucide="download-cloud" class="w-4 h-4 text-cyan-400"></i>
               <span>Export & Download</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Table Search & Date Filter Bar -->
+        <div class="px-4 py-2.5 bg-slate-925 border-b border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <!-- Global Search Box -->
+          <div class="relative flex-1 min-w-[220px]">
+            <i data-lucide="search" class="w-3.5 h-3.5 absolute left-3 top-2.5 text-emerald-400"></i>
+            <input 
+              type="text" 
+              id="tableSearchInput" 
+              oninput="debounceTableSearch(this.value)" 
+              placeholder="Search table rows..." 
+              class="w-full bg-slate-900 border border-slate-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition shadow-inner font-mono"
+            />
+          </div>
+
+          <!-- Date Range Filter -->
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-slate-400 font-bold text-[11px] flex items-center gap-1.5">
+              <i data-lucide="calendar" class="w-3.5 h-3.5 text-cyan-400"></i>
+              <span>Date Filter:</span>
+            </span>
+            <input 
+              type="date" 
+              id="filterStartDate" 
+              onchange="applyDateFilter()" 
+              title="Start Date"
+              class="bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer font-mono"
+            />
+            <span class="text-slate-500 font-bold">to</span>
+            <input 
+              type="date" 
+              id="filterEndDate" 
+              onchange="applyDateFilter()" 
+              title="End Date"
+              class="bg-slate-900 border border-slate-800 rounded-xl px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-cyan-500 cursor-pointer font-mono"
+            />
+            <button 
+              onclick="clearTableFilters()" 
+              class="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-rose-500/50 text-slate-300 hover:text-rose-300 rounded-xl transition cursor-pointer font-bold text-[11px] flex items-center gap-1"
+            >
+              <i data-lucide="x-circle" class="w-3.5 h-3.5 text-rose-400"></i>
+              <span>Reset</span>
             </button>
           </div>
         </div>
@@ -2649,67 +2695,81 @@
       }
     }
 
+    let currentOffset = 0;
+    let currentSearch = "";
+    let currentStartDate = "";
+    let currentEndDate = "";
+    let currentDateColumn = "";
+    let tableSearchDebounceTimer = null;
+
+    function debounceTableSearch(val) {
+      if (tableSearchDebounceTimer) clearTimeout(tableSearchDebounceTimer);
+      tableSearchDebounceTimer = setTimeout(() => {
+        currentSearch = val.trim();
+        currentOffset = 0;
+        if (currentSelectedTable) loadTableData(currentSelectedTable);
+      }, 350);
+    }
+
+    function applyDateFilter() {
+      const startEl = document.getElementById("filterStartDate");
+      const endEl = document.getElementById("filterEndDate");
+      currentStartDate = startEl ? startEl.value : "";
+      currentEndDate = endEl ? endEl.value : "";
+      currentOffset = 0;
+      if (currentSelectedTable) loadTableData(currentSelectedTable);
+    }
+
+    function clearTableFilters() {
+      currentSearch = "";
+      currentStartDate = "";
+      currentEndDate = "";
+      currentOffset = 0;
+      const searchEl = document.getElementById("tableSearchInput");
+      if (searchEl) searchEl.value = "";
+      const startEl = document.getElementById("filterStartDate");
+      if (startEl) startEl.value = "";
+      const endEl = document.getElementById("filterEndDate");
+      if (endEl) endEl.value = "";
+      if (currentSelectedTable) loadTableData(currentSelectedTable);
+    }
+
+    function changeRowsLimit(val) {
+      currentLimit = parseInt(val) || 100;
+      currentOffset = 0;
+      if (currentSelectedTable) loadTableData(currentSelectedTable);
+    }
+
+    function changeTablePage(newOffset) {
+      if (newOffset < 0) newOffset = 0;
+      currentOffset = newOffset;
+      if (currentSelectedTable) loadTableData(currentSelectedTable);
+    }
+
     async function refreshCurrentTableDataQuietly(tableName) {
       if (!tableName) return;
       try {
         const resp = await fetch('/api/get_table_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableName, limit: currentLimit })
+          body: JSON.stringify({ 
+            tableName, 
+            limit: currentLimit, 
+            offset: currentOffset,
+            search: currentSearch,
+            startDate: currentStartDate,
+            endDate: currentEndDate,
+            dateColumn: currentDateColumn
+          })
         });
         const data = await resp.json();
 
         if (data.success) {
-          document.getElementById("currentTableStats").innerText = `Showing ${data.rows.length} of ${data.total_rows.toLocaleString()} records | Schema: public | Live Auto-Sync Active`;
-          
-          const grid = document.getElementById("dataGridContainer");
-          const cols = data.columns || [];
           const rows = data.rows || [];
-
-          if (cols.length === 0) return;
-
-          let headersHtml = cols.map((c, idx) => `
-            <th class="p-3.5 font-bold tracking-wider border-r border-slate-800/60 last:border-r-0">
-              <div class="flex items-center justify-between gap-2">
-                <span class="text-emerald-400 font-black">${escapeHtml(c)}</span>
-                <span class="text-[9px] px-1.5 py-0.5 rounded bg-slate-950 text-cyan-400 border border-slate-800 font-mono font-normal">#${idx+1}</span>
-              </div>
-            </th>
-          `).join('');
-          
-          let rowsHtml = '';
-          if (rows.length === 0) {
-            rowsHtml = `
-              <tr>
-                <td colspan="${cols.length}" class="p-8 text-center text-slate-400 italic font-mono">
-                  Table '${tableName}' is empty (0 records present).
-                </td>
-              </tr>
-            `;
-          } else {
-            rowsHtml = rows.map((r, idx) => `
-              <tr class="hover:bg-emerald-500/10 cursor-pointer border-b border-slate-800/60 transition odd:bg-slate-950/40 even:bg-slate-900/40" onclick="showToast('Row Selected', 'Record #${idx+1} in ${tableName}', 'info')">
-                ${cols.map(c => `<td class="p-3.5 max-w-xs truncate border-r border-slate-800/40 last:border-r-0 font-mono" title="${escapeHtml(String(r[c]))}">${formatCellDisplay(r[c], c)}</td>`).join('')}
-              </tr>
-            `).join('');
-          }
-
-          grid.innerHTML = `
-            <div class="overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950/90 backdrop-blur-xl">
-              <div class="overflow-x-auto custom-scrollbar">
-                <table class="w-full text-left text-xs border-collapse font-mono">
-                  <thead>
-                    <tr class="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-900 text-emerald-400 border-b border-slate-800 uppercase tracking-wider font-extrabold text-[11px] sticky top-0 backdrop-blur-md">
-                      ${headersHtml}
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-slate-800/60 text-slate-200">
-                    ${rowsHtml}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          `;
+          const totalRows = data.total_rows || 0;
+          const startRecord = rows.length > 0 ? currentOffset + 1 : 0;
+          const endRecord = currentOffset + rows.length;
+          document.getElementById("currentTableStats").innerText = `Showing ${startRecord.toLocaleString()} - ${endRecord.toLocaleString()} of ${totalRows.toLocaleString()} records | Schema: public | Live Auto-Sync Active`;
         }
       } catch (err) {
         // Quiet catch
@@ -2886,8 +2946,22 @@
       });
     }
 
-    async function loadTableData(tableName) {
+    async function loadTableData(tableName, resetPage = false) {
       if (!tableName) return;
+      if (resetPage || currentSelectedTable !== tableName) {
+        currentOffset = 0;
+        currentSearch = "";
+        currentStartDate = "";
+        currentEndDate = "";
+        currentDateColumn = "";
+        const searchEl = document.getElementById("tableSearchInput");
+        if (searchEl) searchEl.value = "";
+        const startEl = document.getElementById("filterStartDate");
+        if (startEl) startEl.value = "";
+        const endEl = document.getElementById("filterEndDate");
+        if (endEl) endEl.value = "";
+      }
+
       currentSelectedTable = tableName;
       document.getElementById("currentTableName").innerText = tableName;
       renderTableSidebar(ALL_TABLES);
@@ -2905,7 +2979,15 @@
         const resp = await fetch('/api/get_table_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableName, limit: currentLimit })
+          body: JSON.stringify({ 
+            tableName, 
+            limit: currentLimit, 
+            offset: currentOffset,
+            search: currentSearch,
+            startDate: currentStartDate,
+            endDate: currentEndDate,
+            dateColumn: currentDateColumn
+          })
         });
         const data = await resp.json();
 
@@ -2920,8 +3002,24 @@
 
         const cols = data.columns || [];
         const rows = data.rows || [];
-        
-        document.getElementById("currentTableStats").innerText = `Showing ${rows.length} of ${data.total_rows.toLocaleString()} records | Schema: public | Engine: PostgreSQL`;
+        const totalRows = data.total_rows || 0;
+
+        if (!currentSearch && !currentStartDate && !currentEndDate) {
+          tableRowCounts[tableName] = totalRows;
+          renderTableSidebar(ALL_TABLES);
+        }
+
+        const startRecord = rows.length > 0 ? currentOffset + 1 : 0;
+        const endRecord = currentOffset + rows.length;
+        const totalPages = Math.ceil(totalRows / currentLimit) || 1;
+        const currentPage = Math.floor(currentOffset / currentLimit) + 1;
+
+        const filterInfo = [];
+        if (currentSearch) filterInfo.push(`Search: "${escapeHtml(currentSearch)}"`);
+        if (currentStartDate || currentEndDate) filterInfo.push(`Date: ${currentStartDate || '*'} to ${currentEndDate || '*'}`);
+        const filterStr = filterInfo.length > 0 ? ` (Filtered: ${filterInfo.join(', ')})` : '';
+
+        document.getElementById("currentTableStats").innerText = `Showing ${startRecord.toLocaleString()} - ${endRecord.toLocaleString()} of ${totalRows.toLocaleString()} records${filterStr} | Schema: public | Engine: PostgreSQL`;
 
         if (cols.length === 0) {
           grid.innerHTML = `
@@ -2946,21 +3044,21 @@
           rowsHtml = `
             <tr>
               <td colspan="${cols.length}" class="p-8 text-center text-slate-400 italic font-mono">
-                Table '${tableName}' is empty (0 records present).
+                No records found matching filters for table '${tableName}'.
               </td>
             </tr>
           `;
         } else {
           rowsHtml = rows.map((r, idx) => `
-            <tr class="hover:bg-emerald-500/10 cursor-pointer border-b border-slate-800/60 transition odd:bg-slate-950/40 even:bg-slate-900/40" onclick="showToast('Row Selected', 'Record #${idx+1} in ${tableName}', 'info')">
+            <tr class="hover:bg-emerald-500/10 cursor-pointer border-b border-slate-800/60 transition odd:bg-slate-950/40 even:bg-slate-900/40" onclick="showToast('Row Selected', 'Record #${currentOffset + idx + 1} in ${tableName}', 'info')">
               ${cols.map(c => `<td class="p-3.5 max-w-xs truncate border-r border-slate-800/40 last:border-r-0 font-mono" title="${escapeHtml(String(r[c]))}">${formatCellDisplay(r[c], c)}</td>`).join('')}
             </tr>
           `).join('');
         }
 
         grid.innerHTML = `
-          <div class="overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950/90 backdrop-blur-xl">
-            <div class="overflow-x-auto custom-scrollbar">
+          <div class="overflow-hidden rounded-2xl border border-slate-800 shadow-2xl bg-slate-950/90 backdrop-blur-xl flex flex-col">
+            <div class="overflow-x-auto custom-scrollbar flex-1">
               <table class="w-full text-left text-xs border-collapse font-mono">
                 <thead>
                   <tr class="bg-gradient-to-r from-slate-900 via-slate-900/90 to-slate-900 text-emerald-400 border-b border-slate-800 uppercase tracking-wider font-extrabold text-[11px] sticky top-0 backdrop-blur-md">
@@ -2972,12 +3070,31 @@
                 </tbody>
               </table>
             </div>
+
+            <!-- Pagination Controls Footer Bar -->
+            <div class="p-3.5 bg-slate-900/90 border-t border-slate-800 flex flex-wrap items-center justify-between gap-3 text-xs font-mono text-slate-300">
+              <div class="flex items-center gap-2">
+                <span class="text-slate-400">Page <strong class="text-white">${currentPage}</strong> of <strong class="text-white">${totalPages.toLocaleString()}</strong></span>
+                <span class="text-slate-600">|</span>
+                <span class="text-slate-400">Rows <strong class="text-emerald-400">${startRecord.toLocaleString()} - ${endRecord.toLocaleString()}</strong> of <strong class="text-cyan-300">${totalRows.toLocaleString()}</strong></span>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button onclick="changeTablePage(0)" ${currentPage === 1 ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 font-mono"' : 'class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500 text-slate-200 rounded-lg transition cursor-pointer font-bold font-mono"'}>First</button>
+
+                <button onclick="changeTablePage(${(currentPage - 2) * currentLimit})" ${currentPage === 1 ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 font-mono"' : 'class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500 text-slate-200 rounded-lg transition cursor-pointer font-bold font-mono"'}>◀ Prev</button>
+
+                <button onclick="changeTablePage(${currentPage * currentLimit})" ${currentPage >= totalPages ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 font-mono"' : 'class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500 text-slate-200 rounded-lg transition cursor-pointer font-bold font-mono"'}>Next ▶</button>
+
+                <button onclick="changeTablePage(${(totalPages - 1) * currentLimit})" ${currentPage >= totalPages ? 'disabled class="opacity-40 cursor-not-allowed px-2.5 py-1 bg-slate-950 border border-slate-800 rounded-lg text-slate-500 font-mono"' : 'class="px-2.5 py-1 bg-slate-900 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500 text-slate-200 rounded-lg transition cursor-pointer font-bold font-mono"'}>Last</button>
+              </div>
+            </div>
           </div>
         `;
       } catch (err) {
         grid.innerHTML = `
           <div class="p-6 bg-rose-950/40 border border-rose-500/40 rounded-2xl text-rose-300 text-xs font-mono">
-            <strong>Fetch Error:</strong> Failed to fetch data for table '${tableName}'. ${escapeHtml(err.message)}
+            <strong>Fetch Error:</strong> Failed to fetch data for table '${tableName}': ${escapeHtml(err.message)}
           </div>
         `;
       }
@@ -3099,12 +3216,12 @@
         const resp = await fetch('/api/export_table_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableName: currentSelectedTable, format: currentExportFormat, exportAll: exportAll, limit: currentLimit })
+          body: JSON.stringify({ tableName: currentSelectedTable, format: currentExportFormat, exportAll: exportAll, isPreview: true, limit: currentLimit })
         });
         const data = await resp.json();
 
         if (data.success) {
-          previewArea.value = data.content.slice(0, 3000) + (data.content.length > 3000 ? "\n\n...[Preview truncated for modal display. Click Download File Now for full output.]" : "");
+          previewArea.value = (data.content || "").slice(0, 3000) + ((data.content || "").length > 3000 ? "\n\n...[Preview truncated for modal display. Click Download File Now for full output.]" : "");
           document.getElementById("exportRecordCountText").innerText = `${data.record_count.toLocaleString()} records`;
           document.getElementById("exportFilenameText").innerText = data.filename;
         } else {
@@ -3125,23 +3242,25 @@
         const resp = await fetch('/api/export_table_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ tableName: currentSelectedTable, format: currentExportFormat, exportAll: exportAll, limit: 10000 })
+          body: JSON.stringify({ tableName: currentSelectedTable, format: currentExportFormat, exportAll: exportAll, isPreview: false, limit: currentLimit })
         });
         const data = await resp.json();
 
         if (data.success) {
-          try {
-            const blob = new Blob([data.content], { type: data.mime_type });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = data.filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-          } catch (e) {
-            console.warn("Browser blob trigger:", e);
+          if (data.content && data.content.length > 0) {
+            try {
+              const blob = new Blob([data.content], { type: data.mime_type });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = data.filename;
+              document.body.appendChild(a);
+              a.click();
+              document.body.removeChild(a);
+              URL.revokeObjectURL(url);
+            } catch (e) {
+              console.warn("Browser blob trigger:", e);
+            }
           }
 
           const savedInfo = data.saved_path ? `Saved to Downloads: ${data.saved_path}` : `File '${data.filename}' exported successfully.`;

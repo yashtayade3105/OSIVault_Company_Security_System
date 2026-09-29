@@ -319,7 +319,7 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
             cur.execute(query)
             tables = [row[0] for row in cur.fetchall()]
 
-            # Fast row count estimation via PostgreSQL pg_class (Instant lookup even for 100+ tables & 21 Crore rows)
+            # Fast & exact row count lookup (checks pg_class estimate first, falls back to COUNT(*) if unanalyzed or 0)
             table_counts = {}
             try:
                 cur.execute("""
@@ -330,10 +330,23 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
                 """)
                 estimates = dict(cur.fetchall())
                 for t in tables:
-                    table_counts[t] = estimates.get(t, 0)
+                    cnt = estimates.get(t, 0)
+                    if cnt == 0:
+                        try:
+                            cur.execute(f'SELECT COUNT(*) FROM "{t}";')
+                            res = cur.fetchone()
+                            cnt = res[0] if res else 0
+                        except Exception:
+                            cnt = 0
+                    table_counts[t] = cnt
             except Exception:
                 for t in tables:
-                    table_counts[t] = 0
+                    try:
+                        cur.execute(f'SELECT COUNT(*) FROM "{t}";')
+                        res = cur.fetchone()
+                        table_counts[t] = res[0] if res else 0
+                    except Exception:
+                        table_counts[t] = 0
 
             conn.close()
 
@@ -374,6 +387,7 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
                 connect_timeout=5
             )
             cur = conn.cursor()
+
             query = """
                 SELECT table_name 
                 FROM information_schema.tables 
@@ -384,7 +398,7 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
             cur.execute(query)
             tables = [row[0] for row in cur.fetchall()]
 
-            # Fast row count estimation via PostgreSQL pg_class
+            # Fast & exact row count lookup (checks pg_class estimate first, falls back to COUNT(*) if unanalyzed or 0)
             table_counts = {}
             try:
                 cur.execute("""
@@ -395,10 +409,23 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
                 """)
                 estimates = dict(cur.fetchall())
                 for t in tables:
-                    table_counts[t] = estimates.get(t, 0)
+                    cnt = estimates.get(t, 0)
+                    if cnt == 0:
+                        try:
+                            cur.execute(f'SELECT COUNT(*) FROM "{t}";')
+                            res = cur.fetchone()
+                            cnt = res[0] if res else 0
+                        except Exception:
+                            cnt = 0
+                    table_counts[t] = cnt
             except Exception:
                 for t in tables:
-                    table_counts[t] = 0
+                    try:
+                        cur.execute(f'SELECT COUNT(*) FROM "{t}";')
+                        res = cur.fetchone()
+                        table_counts[t] = res[0] if res else 0
+                    except Exception:
+                        table_counts[t] = 0
 
             conn.close()
 
@@ -421,8 +448,21 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
         if not table_name:
             return {"success": False, "error": "Table name is required"}
 
-        limit = int(payload.get("limit", 100))
+        # Safe limit enforcement for UI display to prevent memory/fetch crashes on large tables
+        raw_limit = int(payload.get("limit", 100))
+        if raw_limit <= 0 or raw_limit > 1000:
+            limit = 500  # Cap UI display limit at 500 rows per page max
+        else:
+            limit = raw_limit
+
         offset = int(payload.get("offset", 0))
+        if offset < 0:
+            offset = 0
+
+        search = str(payload.get("search", "")).strip()
+        start_date = str(payload.get("startDate", "")).strip()
+        end_date = str(payload.get("endDate", "")).strip()
+        date_column = str(payload.get("dateColumn", "")).strip()
 
         try:
             conn = psycopg2.connect(
@@ -438,29 +478,67 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
 
             quoted_table = f'"{table_name}"'
             
-            # Fast row count estimation for single table lookup
-            try:
-                cur.execute("""
-                    SELECT GREATEST(c.reltuples::bigint, 0)
-                    FROM pg_class c
-                    JOIN pg_namespace n ON n.oid = c.relnamespace
-                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relname = %s;
-                """, (table_name,))
-                res = cur.fetchone()
-                total_rows = res[0] if res and res[0] > 0 else 0
-                if total_rows == 0:
-                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table};')
-                    total_rows = cur.fetchone()[0]
-            except Exception:
-                total_rows = 0
+            # Fetch table columns & data types
+            cur.execute("""
+                SELECT column_name, data_type 
+                FROM information_schema.columns 
+                WHERE table_schema NOT IN ('pg_catalog', 'information_schema') 
+                  AND table_name = %s 
+                ORDER BY ordinal_position;
+            """, (table_name,))
+            col_info = cur.fetchall()
+            columns = [c[0] for c in col_info]
+            date_cols = [c[0] for c in col_info if any(t in c[1].lower() for t in ['date', 'time', 'timestamp'])]
 
-            # Fetch paginated column description & rows
-            if limit > 0:
-                cur.execute(f'SELECT * FROM {quoted_table} LIMIT %s OFFSET %s;', (limit, offset))
+            # Build dynamic WHERE clause
+            where_clauses = []
+            params = []
+
+            # Global search across columns
+            if search and columns:
+                search_conds = []
+                for col in columns[:15]:  # Search first 15 columns for performance
+                    search_conds.append(f'"{col}"::text ILIKE %s')
+                    params.append(f'%{search}%')
+                where_clauses.append(f"({' OR '.join(search_conds)})")
+
+            # Date Range Filter
+            target_date_col = date_column if date_column in columns else (date_cols[0] if date_cols else None)
+            if target_date_col:
+                if start_date:
+                    where_clauses.append(f'"{target_date_col}"::date >= %s::date')
+                    params.append(start_date)
+                if end_date:
+                    where_clauses.append(f'"{target_date_col}"::date <= %s::date')
+                    params.append(end_date)
+
+            where_str = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+            # Calculate total filtered rows
+            if where_str:
+                cur.execute(f'SELECT COUNT(*) FROM {quoted_table}{where_str};', params)
+                total_rows = cur.fetchone()[0]
             else:
-                cur.execute(f'SELECT * FROM {quoted_table};')
+                # Fast row count estimation for unfiltered query
+                try:
+                    cur.execute("""
+                        SELECT GREATEST(c.reltuples::bigint, 0)
+                        FROM pg_class c
+                        JOIN pg_namespace n ON n.oid = c.relnamespace
+                        WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relname = %s;
+                    """, (table_name,))
+                    res = cur.fetchone()
+                    total_rows = res[0] if res and res[0] > 0 else 0
+                    if total_rows == 0:
+                        cur.execute(f'SELECT COUNT(*) FROM {quoted_table};')
+                        total_rows = cur.fetchone()[0]
+                except Exception:
+                    total_rows = 0
 
-            columns = [desc[0] for desc in cur.description] if cur.description else []
+            # Execute paginated query with filters
+            query_sql = f'SELECT * FROM {quoted_table}{where_str} LIMIT %s OFFSET %s;'
+            cur.execute(query_sql, params + [limit, offset])
+
             raw_rows = cur.fetchall()
 
             rows = []
@@ -476,10 +554,15 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
                 "success": True,
                 "tableName": table_name,
                 "columns": columns,
+                "dateColumns": date_cols,
                 "rows": rows,
                 "total_rows": total_rows,
                 "offset": offset,
-                "limit": limit
+                "limit": limit,
+                "search": search,
+                "startDate": start_date,
+                "endDate": end_date,
+                "activeDateColumn": target_date_col
             }
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -489,6 +572,7 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
         fmt = payload.get("format", "csv").lower()
         export_all = payload.get("exportAll", True)
         limit = int(payload.get("limit", 5000))
+        is_preview = payload.get("isPreview", False)
 
         if not table_name:
             return {"success": False, "error": "Table name is required"}
@@ -503,48 +587,234 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
                 sslmode=ACTIVE_DB_CONFIG["sslmode"],
                 connect_timeout=5
             )
-            cur = conn.cursor()
             quoted_table = f'"{table_name}"'
 
-            if export_all:
-                cur.execute(f'SELECT * FROM {quoted_table};')
-            else:
-                cur.execute(f'SELECT * FROM {quoted_table} LIMIT %s;', (limit,))
+            # Fast preview mode: fetch a small sample (50 rows) for modal display
+            if is_preview:
+                cur = conn.cursor()
+                preview_limit = 50
+                cur.execute(f'SELECT * FROM {quoted_table} LIMIT %s;', (preview_limit,))
+                columns = [desc[0] for desc in cur.description] if cur.description else []
+                raw_rows = cur.fetchall()
+                rows = [dict(zip(columns, r)) for r in raw_rows]
+                
+                # Fetch total table count for display in preview modal
+                try:
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table};')
+                    count_row = cur.fetchone()
+                    total_table_count = count_row[0] if count_row else len(rows)
+                except Exception:
+                    total_table_count = len(rows)
+                conn.close()
+
+                export_res = format_export_data(table_name, columns, rows, fmt)
+                export_res["record_count"] = total_table_count
+                return export_res
+
+            # High-performance streaming export mode: stream rows in 10,000 batch chunks directly to disk file in Downloads
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            base_filename = f"{table_name}_{timestamp}"
+
+            ext_map = {
+                "csv": "csv",
+                "tsv": "tsv",
+                "sql": "sql",
+                "json": "json",
+                "xlsx_xml": "xls",
+                "html": "html"
+            }
+            mime_map = {
+                "csv": "text/csv",
+                "tsv": "text/tab-separated-values",
+                "sql": "application/sql",
+                "json": "application/json",
+                "xlsx_xml": "application/vnd.ms-excel",
+                "html": "text/html"
+            }
+
+            ext = ext_map.get(fmt, "csv")
+            mime = mime_map.get(fmt, "text/csv")
+            filename = f"{base_filename}.{ext}"
+
+            downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
+            os.makedirs(downloads_dir, exist_ok=True)
+            file_path = os.path.join(downloads_dir, filename)
+
+            # Use server-side named cursor to stream large datasets without high memory usage
+            cursor_name = f"export_{uuid.uuid4().hex}"
+            try:
+                cur = conn.cursor(name=cursor_name)
+                cur.itersize = 10000
+                if export_all:
+                    cur.execute(f'SELECT * FROM {quoted_table};')
+                else:
+                    cur.execute(f'SELECT * FROM {quoted_table} LIMIT %s;', (limit,))
+            except Exception:
+                cur = conn.cursor()
+                if export_all:
+                    cur.execute(f'SELECT * FROM {quoted_table};')
+                else:
+                    cur.execute(f'SELECT * FROM {quoted_table} LIMIT %s;', (limit,))
 
             columns = [desc[0] for desc in cur.description] if cur.description else []
-            raw_rows = cur.fetchall()
+            total_exported = 0
 
-            rows = []
-            for r in raw_rows:
-                row_dict = {}
-                for col, val in zip(columns, r):
-                    row_dict[col] = val
-                rows.append(row_dict)
+            with open(file_path, "w", encoding="utf-8") as f:
+                if fmt == "csv":
+                    writer = csv.writer(f)
+                    writer.writerow(columns)
+                    while True:
+                        batch = cur.fetchmany(10000)
+                        if not batch:
+                            break
+                        writer.writerows(batch)
+                        total_exported += len(batch)
+
+                elif fmt == "tsv":
+                    writer = csv.writer(f, delimiter='\t')
+                    writer.writerow(columns)
+                    while True:
+                        batch = cur.fetchmany(10000)
+                        if not batch:
+                            break
+                        writer.writerows(batch)
+                        total_exported += len(batch)
+
+                elif fmt == "sql":
+                    f.write(f"-- OSIVault Enterprise SQL Data Dump\n")
+                    f.write(f"-- Table: {table_name}\n")
+                    f.write(f"-- Timestamp: {datetime.datetime.now().isoformat()}\n\n")
+                    col_list = ", ".join([f'"{c}"' for c in columns])
+                    while True:
+                        batch = cur.fetchmany(5000)
+                        if not batch:
+                            break
+                        lines = []
+                        for r in batch:
+                            vals = []
+                            for v in r:
+                                if v is None:
+                                    vals.append("NULL")
+                                elif isinstance(v, (int, float, decimal.Decimal)):
+                                    vals.append(str(v))
+                                elif isinstance(v, bool):
+                                    vals.append("TRUE" if v else "FALSE")
+                                else:
+                                    escaped = str(v).replace("'", "''")
+                                    vals.append(f"'{escaped}'")
+                            lines.append(f'INSERT INTO "{table_name}" ({col_list}) VALUES ({", ".join(vals)});\n')
+                        f.writelines(lines)
+                        total_exported += len(batch)
+
+                elif fmt == "json":
+                    f.write("[\n")
+                    encoder = PostgresJSONEncoder()
+                    first = True
+                    while True:
+                        batch = cur.fetchmany(5000)
+                        if not batch:
+                            break
+                        lines = []
+                        for r in batch:
+                            row_dict = dict(zip(columns, r))
+                            encoded_row = encoder.encode(row_dict)
+                            if not first:
+                                lines.append(",\n" + encoded_row)
+                            else:
+                                lines.append(encoded_row)
+                                first = False
+                        f.writelines(lines)
+                        total_exported += len(batch)
+                    f.write("\n]")
+
+                elif fmt == "xlsx_xml":
+                    f.write('<?xml version="1.0"?>\n')
+                    f.write('<?mso-application progid="Excel.Sheet"?>\n')
+                    f.write('<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n')
+                    f.write(' xmlns:o="urn:schemas-microsoft-com:office:office"\n')
+                    f.write(' xmlns:x="urn:schemas-microsoft-com:office:excel"\n')
+                    f.write(' xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"\n')
+                    f.write(' xmlns:html="http://www.w3.org/TR/REC-html40">\n')
+                    f.write(' <Styles>\n')
+                    f.write('  <Style ss:ID="HeaderStyle">\n')
+                    f.write('   <Font ss:Bold="1" ss:Color="#FFFFFF" ss:Size="11" ss:FontName="Calibri"/>\n')
+                    f.write('   <Interior ss:Color="#10B981" ss:Pattern="Solid"/>\n')
+                    f.write('   <Alignment ss:Horizontal="Center" ss:Vertical="Center"/>\n')
+                    f.write('  </Style>\n')
+                    f.write('  <Style ss:ID="DataStyle">\n')
+                    f.write('   <Font ss:Color="#000000" ss:Size="10" ss:FontName="Calibri"/>\n')
+                    f.write('  </Style>\n')
+                    f.write(' </Styles>\n')
+                    f.write(f' <Worksheet ss:Name="{table_name[:30]}">\n')
+                    f.write('  <Table>\n')
+                    f.write('   <Row ss:StyleID="HeaderStyle" ss:Height="24">\n')
+                    for c in columns:
+                        f.write(f'    <Cell><Data ss:Type="String">{html.escape(c)}</Data></Cell>\n')
+                    f.write('   </Row>\n')
+
+                    while True:
+                        batch = cur.fetchmany(5000)
+                        if not batch:
+                            break
+                        xml_lines = []
+                        for r in batch:
+                            xml_lines.append('   <Row ss:StyleID="DataStyle" ss:Height="20">\n')
+                            for v in r:
+                                if v is None:
+                                    xml_lines.append('    <Cell><Data ss:Type="String"></Data></Cell>\n')
+                                elif isinstance(v, (int, float, decimal.Decimal)):
+                                    xml_lines.append(f'    <Cell><Data ss:Type="Number">{v}</Data></Cell>\n')
+                                else:
+                                    xml_lines.append(f'    <Cell><Data ss:Type="String">{html.escape(str(v))}</Data></Cell>\n')
+                            xml_lines.append('   </Row>\n')
+                        f.writelines(xml_lines)
+                        total_exported += len(batch)
+
+                    f.write('  </Table>\n')
+                    f.write(' </Worksheet>\n')
+                    f.write('</Workbook>\n')
+
+                elif fmt == "html":
+                    f.write('<!DOCTYPE html>\n<html>\n<head>\n<meta charset="utf-8">\n')
+                    f.write(f'<title>OSIVault Export - {html.escape(table_name)}</title>\n')
+                    f.write('<style>\nbody { font-family: monospace; background: #080c14; color: #f8fafc; padding: 24px; }\n')
+                    f.write('table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }\n')
+                    f.write('th { padding: 12px; background: #10b981; color: white; border: 1px solid #059669; text-align: left; }\n')
+                    f.write('td { padding: 10px; border: 1px solid #334155; }\n</style>\n</head>\n<body>\n')
+                    f.write(f'<h2>OSIVault Enterprise Data Export - {html.escape(table_name)}</h2>\n')
+                    f.write('<table>\n<thead><tr>\n')
+                    for c in columns:
+                        f.write(f'<th>{html.escape(c)}</th>\n')
+                    f.write('</tr></thead>\n<tbody>\n')
+
+                    while True:
+                        batch = cur.fetchmany(5000)
+                        if not batch:
+                            break
+                        html_lines = []
+                        for r in batch:
+                            html_lines.append('<tr style="background: #0f172a;">')
+                            for v in r:
+                                val_str = html.escape(str(v)) if v is not None else ""
+                                html_lines.append(f'<td>{val_str}</td>')
+                            html_lines.append('</tr>\n')
+                        f.writelines(html_lines)
+                        total_exported += len(batch)
+
+                    f.write('</tbody>\n</table>\n</body>\n</html>\n')
 
             conn.close()
 
-            export_res = format_export_data(table_name, columns, rows, fmt)
+            print(f"[EXPORT SUCCESS] Streamed {total_exported} rows directly to Downloads: {file_path}")
 
-            # Save exported file directly to local system Downloads folder
-            try:
-                downloads_dir = os.path.join(os.path.expanduser("~"), "Downloads")
-                os.makedirs(downloads_dir, exist_ok=True)
-                file_path = os.path.join(downloads_dir, export_res["filename"])
-                
-                content = export_res["content"]
-                if isinstance(content, bytes):
-                    with open(file_path, "wb") as f:
-                        f.write(content)
-                else:
-                    with open(file_path, "w", encoding="utf-8") as f:
-                        f.write(str(content))
-                
-                export_res["saved_path"] = file_path
-                print(f"[EXPORT SUCCESS] Saved file locally to Downloads: {file_path}")
-            except Exception as save_err:
-                print(f"[EXPORT WARN] Could not save directly to Downloads: {save_err}")
-
-            return export_res
+            return {
+                "success": True,
+                "filename": filename,
+                "saved_path": file_path,
+                "record_count": total_exported,
+                "mime_type": mime,
+                "content": ""
+            }
         except Exception as e:
             return {"success": False, "error": str(e)}
 

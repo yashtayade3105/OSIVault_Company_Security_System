@@ -119,9 +119,33 @@ def register_audit_signal(
     """
     In-Built OSIVault Helper to register 1-line automatic signals for any Django model.
     Handles CREATE, UPDATE (with pre-save diff snapshotting), and DELETE.
+    Automatically installs PostgreSQL immutability triggers on audit log tables.
     Usage:
         register_audit_signal(Student, StudentAuditLog, CollegeMasterAuditLog)
     """
+
+    # 0. Auto-install PostgreSQL BEFORE UPDATE OR DELETE triggers on audit tables safely without app initialization warning
+    def _safe_install_triggers():
+        try:
+            from osivault.audit.postgres import install_postgres_immutability_trigger
+            if audit_model_class and hasattr(audit_model_class, "_meta"):
+                install_postgres_immutability_trigger(audit_model_class._meta.db_table)
+            if central_audit_model_class and hasattr(central_audit_model_class, "_meta"):
+                install_postgres_immutability_trigger(central_audit_model_class._meta.db_table)
+        except Exception:
+            pass
+
+    try:
+        from django.apps import apps
+        if apps.ready:
+            _safe_install_triggers()
+        else:
+            from django.db.models.signals import post_migrate
+            @receiver(post_migrate)
+            def _on_post_migrate_install_triggers(sender, **kwargs):
+                _safe_install_triggers()
+    except Exception:
+        _safe_install_triggers()
 
     # 1. Pre-Save Handler: Snapshot previous values for UPDATE diff tracking
     @receiver(pre_save, sender=target_model_class, weak=False)
