@@ -281,15 +281,31 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
         sslmode = payload.get("sslmode", "disable")
 
         try:
-            conn = psycopg2.connect(
-                host=host,
-                port=port,
-                dbname=dbname,
-                user=user,
-                password=password,
-                sslmode=sslmode,
-                connect_timeout=5
-            )
+            try:
+                conn = psycopg2.connect(
+                    host=host,
+                    port=port,
+                    dbname=dbname,
+                    user=user,
+                    password=password,
+                    sslmode=sslmode,
+                    connect_timeout=5
+                )
+            except Exception as conn_err:
+                if "ssl" in str(conn_err).lower() or sslmode == "disable":
+                    # Smart auto-fallback for AWS RDS / Cloud DBs enforcing SSL/TLS
+                    sslmode = "prefer"
+                    conn = psycopg2.connect(
+                        host=host,
+                        port=port,
+                        dbname=dbname,
+                        user=user,
+                        password=password,
+                        sslmode="prefer",
+                        connect_timeout=5
+                    )
+                else:
+                    raise conn_err
             cur = conn.cursor()
             
             # Fetch all user tables from the specified database
