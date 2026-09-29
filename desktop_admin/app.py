@@ -303,13 +303,20 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
             cur.execute(query)
             tables = [row[0] for row in cur.fetchall()]
 
-            # Fetch table row counts
+            # Fast row count estimation via PostgreSQL pg_class (Instant lookup even for 100+ tables & 21 Crore rows)
             table_counts = {}
-            for t in tables:
-                try:
-                    cur.execute(f'SELECT COUNT(*) FROM "{t}";')
-                    table_counts[t] = cur.fetchone()[0]
-                except Exception:
+            try:
+                cur.execute("""
+                    SELECT c.relname, GREATEST(c.reltuples::bigint, 0)
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relkind = 'r';
+                """)
+                estimates = dict(cur.fetchall())
+                for t in tables:
+                    table_counts[t] = estimates.get(t, 0)
+            except Exception:
+                for t in tables:
                     table_counts[t] = 0
 
             conn.close()
@@ -361,12 +368,20 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
             cur.execute(query)
             tables = [row[0] for row in cur.fetchall()]
 
+            # Fast row count estimation via PostgreSQL pg_class
             table_counts = {}
-            for t in tables:
-                try:
-                    cur.execute(f'SELECT COUNT(*) FROM "{t}";')
-                    table_counts[t] = cur.fetchone()[0]
-                except Exception:
+            try:
+                cur.execute("""
+                    SELECT c.relname, GREATEST(c.reltuples::bigint, 0)
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relkind = 'r';
+                """)
+                estimates = dict(cur.fetchall())
+                for t in tables:
+                    table_counts[t] = estimates.get(t, 0)
+            except Exception:
+                for t in tables:
                     table_counts[t] = 0
 
             conn.close()
@@ -407,9 +422,21 @@ class CustomHTTPRequestHandler(SimpleHTTPRequestHandler):
 
             quoted_table = f'"{table_name}"'
             
-            # Fetch total row count
-            cur.execute(f'SELECT COUNT(*) FROM {quoted_table};')
-            total_rows = cur.fetchone()[0]
+            # Fast row count estimation for single table lookup
+            try:
+                cur.execute("""
+                    SELECT GREATEST(c.reltuples::bigint, 0)
+                    FROM pg_class c
+                    JOIN pg_namespace n ON n.oid = c.relnamespace
+                    WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND c.relname = %s;
+                """, (table_name,))
+                res = cur.fetchone()
+                total_rows = res[0] if res and res[0] > 0 else 0
+                if total_rows == 0:
+                    cur.execute(f'SELECT COUNT(*) FROM {quoted_table};')
+                    total_rows = cur.fetchone()[0]
+            except Exception:
+                total_rows = 0
 
             # Fetch paginated column description & rows
             if limit > 0:

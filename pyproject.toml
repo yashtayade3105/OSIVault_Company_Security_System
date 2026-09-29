@@ -60,7 +60,7 @@ Issues = "https://github.com/OneSmarterInc/OSIVault/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["osivault*"]
+include = ["osivault*", "desktop_admin*"]
 
 [tool.pytest.ini_options]
 DJANGO_SETTINGS_MODULE = "tests.settings"
