@@ -42,25 +42,31 @@ class WebAuthnRegistrar:
         self.rp_id = rp_id
         self.rp_name = rp_name
 
-    def generate_registration_options(self, username: str) -> Dict[str, Any]:
-        from webauthn import generate_registration_options
-        from webauthn.helpers import bytes_to_base64url
-        import uuid
-
-        user_id = str(uuid.uuid4()).encode("utf-8")
-        options = generate_registration_options(
-            rp_id=self.rp_id,
-            rp_name=self.rp_name,
+    def generate_registration_options(self, username: str, user_id: bytes | str | None = None, rp_id: str = None, rp_name: str = None) -> Dict[str, Any]:
+        from osivault.auth.webauthn import generate_registration_options
+        return generate_registration_options(
+            username=username,
             user_id=user_id,
-            user_name=username,
+            rp_id=rp_id or self.rp_id,
+            rp_name=rp_name or self.rp_name,
         )
-        return {
-            "challenge": bytes_to_base64url(options.challenge),
-            "rpId": self.rp_id,
-            "rpName": self.rp_name,
-            "userId": bytes_to_base64url(user_id),
-            "username": username,
-        }
+
+    def verify_registration_response(
+        self,
+        response_data: Dict[str, Any],
+        expected_challenge: bytes | str,
+        expected_rp_id: str = None,
+        expected_origin: str = None,
+    ) -> Dict[str, Any]:
+        from osivault.auth.webauthn import verify_registration_response
+        rpid = expected_rp_id or self.rp_id
+        orig = expected_origin or f"https://{rpid}"
+        return verify_registration_response(
+            response_data=response_data,
+            expected_challenge=expected_challenge,
+            expected_rp_id=rpid,
+            expected_origin=orig,
+        )
 
 
 class WebAuthnAsserter:
@@ -70,28 +76,38 @@ class WebAuthnAsserter:
     def __init__(self, rp_id: str = "localhost"):
         self.rp_id = rp_id
 
-    def get_auth_options(self, email: str) -> Dict[str, Any]:
-        from osivault.admin.auth import get_webauthn_auth_options
-        return get_webauthn_auth_options(email=email, rp_id=self.rp_id)
+    def generate_assertion_options(self, credential_ids: List[str] | str, rp_id: str = None) -> Dict[str, Any]:
+        from osivault.auth.webauthn import generate_assertion_options
+        return generate_assertion_options(
+            credential_ids=credential_ids,
+            rp_id=rp_id or self.rp_id,
+        )
 
-    def verify_assertion(
+    def verify_assertion_response(
         self,
-        email: str,
         credential_id: str,
         authenticator_data_b64: str,
         client_data_json_b64: str,
         signature_b64: str,
         challenge_b64: str,
-    ) -> Tuple[Any, str]:
-        from osivault.admin.auth import verify_webauthn_assertion
-        return verify_webauthn_assertion(
-            email=email,
+        public_key_b64: str,
+        expected_rp_id: str = None,
+        expected_origin: str = None,
+        current_sign_count: int = 0,
+    ) -> Dict[str, Any]:
+        from osivault.auth.webauthn import verify_assertion_response
+        rpid = expected_rp_id or self.rp_id
+        orig = expected_origin or f"https://{rpid}"
+        return verify_assertion_response(
             credential_id=credential_id,
             authenticator_data_b64=authenticator_data_b64,
             client_data_json_b64=client_data_json_b64,
             signature_b64=signature_b64,
             challenge_b64=challenge_b64,
-            rp_id=self.rp_id,
+            public_key_b64=public_key_b64,
+            expected_rp_id=rpid,
+            expected_origin=orig,
+            current_sign_count=current_sign_count,
         )
 
 
