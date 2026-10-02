@@ -6,7 +6,8 @@ Provides TOTP verification, WebAuthn registration & assertion, and Recovery Code
 import pyotp
 import secrets
 import hashlib
-from typing import List, Tuple, Dict, Any
+from datetime import datetime, timezone
+from typing import List, Tuple, Dict, Any, Optional
 
 
 class AuthError(Exception):
@@ -16,19 +17,45 @@ class AuthError(Exception):
 
 class TOTPVerifier:
     """
-    TOTP (Time-based One-Time Password) verifier with replay protection window.
+    TOTP (Time-based One-Time Password) verifier with replay protection.
+    Defaults valid_window to 0 and enforces last-counter replay guard.
     """
-    def __init__(self, secret: str = None):
+    def __init__(self, secret: str = None, last_counter: Optional[int] = None):
         self.secret = secret or pyotp.random_base32()
         self.totp = pyotp.TOTP(self.secret)
+        self.last_counter: Optional[int] = last_counter
 
     def generate_otp(self) -> str:
         return self.totp.now()
 
-    def verify(self, otp_code: str, valid_window: int = 1) -> bool:
+    def verify(
+        self,
+        otp_code: str,
+        valid_window: int = 0,
+        last_counter: Optional[int] = None,
+        for_time: Optional[datetime] = None,
+    ) -> bool:
+        """
+        Verify a 6-digit TOTP code.
+        - Defaults valid_window to 0.
+        - Enforces last-counter replay guard.
+        """
         if not otp_code or not str(otp_code).isdigit():
             return False
-        return self.totp.verify(str(otp_code), valid_window=valid_window)
+
+        now = for_time or datetime.now(timezone.utc)
+        current_counter = self.totp.timecode(now)
+        min_counter = last_counter if last_counter is not None else self.last_counter
+
+        if min_counter is not None and current_counter <= min_counter:
+            return False
+
+        verified = self.totp.verify(str(otp_code), valid_window=valid_window, for_time=now)
+        if verified:
+            self.last_counter = current_counter
+            return True
+
+        return False
 
     def provisioning_uri(self, name: str, issuer_name: str = "OSIVault") -> str:
         return self.totp.provisioning_uri(name=name, issuer_name=issuer_name)
