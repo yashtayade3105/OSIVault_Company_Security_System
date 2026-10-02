@@ -38,7 +38,7 @@ class WebAuthnRegistrar:
     """
     WebAuthn / FIDO2 Hardware Key Registration adapter.
     """
-    def __init__(self, rp_id: str = "localhost", rp_name: str = "OSIVault Core"):
+    def __init__(self, rp_id: str, rp_name: str = "OSIVault Core"):
         self.rp_id = rp_id
         self.rp_name = rp_name
 
@@ -46,8 +46,8 @@ class WebAuthnRegistrar:
         from osivault.auth.webauthn import generate_registration_options
         return generate_registration_options(
             username=username,
-            user_id=user_id,
             rp_id=rp_id or self.rp_id,
+            user_id=user_id,
             rp_name=rp_name or self.rp_name,
         )
 
@@ -73,7 +73,7 @@ class WebAuthnAsserter:
     """
     WebAuthn / FIDO2 Hardware Key Authentication Asserter adapter.
     """
-    def __init__(self, rp_id: str = "localhost"):
+    def __init__(self, rp_id: str):
         self.rp_id = rp_id
 
     def generate_assertion_options(self, credential_ids: List[str] | str, rp_id: str = None) -> Dict[str, Any]:

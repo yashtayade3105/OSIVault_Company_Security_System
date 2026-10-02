@@ -21,8 +21,8 @@ from webauthn.helpers import bytes_to_base64url, base64url_to_bytes
 
 def generate_registration_options(
     username: str,
+    rp_id: str,
     user_id: bytes | str | None = None,
-    rp_id: str = "localhost",
     rp_name: str = "OSIVault Core",
 ) -> Dict[str, Any]:
     """
