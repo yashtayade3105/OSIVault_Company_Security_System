@@ -24,11 +24,14 @@ osivault_test.sqlite3
 env/
 venv/
 
-# Node
+# Node & Temp
 node_modules/
 dist/
-
-# Test Subprojects
-Testing_Projects/
 scratch/
 
+# Test Subprojects & Demo Apps (Kept Locally Only)
+AUTH_MODULE_TESTING/
+SFTP_Tunnel_Module/
+Testing_Projects/
+desktop_admin/
+website/
