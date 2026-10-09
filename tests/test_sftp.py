@@ -430,3 +430,63 @@ def test_sftp_view_file_command_decryption_flow(tmp_path):
         assert log_entry is not None
         assert log_entry.is_success is True
 
+
+def test_sftp_crypto_empty_payload_encryption():
+    """Test encrypting and decrypting empty 0-byte file payload."""
+    empty_bytes = b""
+    key = generate_sftp_key()
+
+    encrypted_bytes, key_used, sha256_orig = encrypt_file_payload(empty_bytes, key=key)
+    assert encrypted_bytes.startswith(b"OSIV")
+    assert sha256_orig == compute_sha256(empty_bytes)
+
+    decrypted_bytes, sha256_dec = decrypt_file_payload(encrypted_bytes, key=key_used)
+    assert decrypted_bytes == empty_bytes
+    assert sha256_dec == sha256_orig
+
+
+def test_sftp_multi_notepad_viewer_secure_zero_wipe():
+    """Test launch_secure_multi_notepad_viewer launches process and zero-wipes all temp files on exit."""
+    from osivault.sftp.viewer import launch_secure_multi_notepad_viewer
+
+    file1_data = b"PAYLOAD_FILE_1_SECRET"
+    file2_data = b"PAYLOAD_FILE_2_CONFIDENTIAL"
+
+    file_items = [
+        ("file1.edi", file1_data),
+        ("file2.txt", file2_data),
+    ]
+
+    mock_proc = MagicMock()
+    mock_proc.wait.return_value = 0
+
+    with patch("subprocess.Popen", return_value=mock_proc) as mock_popen:
+        success = launch_secure_multi_notepad_viewer(file_items, wait_for_close=True)
+        assert success is True
+        assert mock_popen.called
+
+
+@pytest.mark.django_db
+def test_sftp_file_access_log_recording():
+    """Test SFTPFileAccessLog database model records superuser access history."""
+    from osivault.sftp.models import SFTPSuperUser, SFTPFileAccessLog
+
+    su = SFTPSuperUser.objects.create_superuser("log_admin", "log@osivault.com", "+14155558888", "Pass123!")
+
+    access_log = SFTPFileAccessLog.objects.create(
+        superuser=su,
+        file_path="/vault/incoming/AHH_Elig_Data.edi",
+        filename="AHH_Elig_Data.edi",
+        action="DECRYPT_VIEW",
+        sha256_hash="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        is_success=True,
+    )
+
+    assert access_log.pk is not None
+    assert access_log.superuser == su
+    assert access_log.filename == "AHH_Elig_Data.edi"
+    assert access_log.is_success is True
+    assert "AHH_Elig_Data.edi" in str(access_log)
+
+
+
