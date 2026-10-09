@@ -4,7 +4,7 @@ Concrete models for OSIVault test suite.
 
 from django.db import models
 from osivault.audit.models import OSIVaultAuditLog
-from osivault.fields import EncryptedTextField, EncryptedJSONField
+from osivault.fields import EncryptedTextField, EncryptedCharField, EncryptedJSONField
 
 
 class ConcreteAuditLog(OSIVaultAuditLog):
@@ -18,13 +18,15 @@ class ConcreteAuditLog(OSIVaultAuditLog):
 
 class PatientRecord(models.Model):
     """
-    Test model for verifying EncryptedTextField and EncryptedJSONField.
+    Test model for verifying EncryptedTextField, EncryptedCharField, and EncryptedJSONField.
     """
     patient_name = models.CharField(max_length=255)
     ssn = EncryptedTextField(null=True, blank=True)
     ssn_search = models.CharField(max_length=64, db_index=True, null=True, blank=True)
+    secret_code = EncryptedCharField(max_length=100, null=True, blank=True)
     medical_history = EncryptedJSONField(null=True, blank=True)
 
     class Meta:
         app_label = "tests"
         db_table = "test_patient_record"
+

@@ -35,6 +35,7 @@ class Migration(migrations.Migration):
                 ("patient_name", models.CharField(max_length=255)),
                 ("ssn", models.TextField(blank=True, null=True)),
                 ("ssn_search", models.CharField(blank=True, db_index=True, max_length=64, null=True)),
+                ("secret_code", models.TextField(blank=True, null=True)),
                 ("medical_history", models.TextField(blank=True, null=True)),
             ],
             options={
