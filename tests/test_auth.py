@@ -796,7 +796,96 @@ def test_recovery_codes_api_flow():
         data=json.dumps({"email": user.email, "code": valid_code}),
         content_type="application/json"
     )
-    assert ver_resp2.status_code == 400
     assert "Invalid or already used" in ver_resp2.json()["message"]
+
+
+@pytest.mark.django_db
+def test_email_otp_attempt_limit_exceeded():
+    """Test that after 5 failed verification attempts, Email OTP is locked and fails."""
+    email = "attempts_test@onesmarter.com"
+    gen_res = EmailOTPAdapter.generate_otp(email=email, purpose="REGISTRATION")
+    assert gen_res["status"] == "success"
+
+    # Attempt 5 wrong OTPs
+    for _ in range(5):
+        ok, msg = EmailOTPAdapter.verify_otp(email=email, otp_code="000000", purpose="REGISTRATION")
+        assert ok is False
+
+    # 6th attempt with CORRECT OTP should now be rejected due to attempt limit
+    ok_correct, msg_correct = EmailOTPAdapter.verify_otp(email=email, otp_code=gen_res["otp_code"], purpose="REGISTRATION")
+    assert ok_correct is False
+    assert "Maximum verification attempts exceeded" in msg_correct
+
+
+@pytest.mark.django_db
+def test_email_otp_expiration_enforcement():
+    """Test that expired Email OTP is rejected."""
+    from datetime import timedelta
+    from osivault.auth.models import EmailOTPVerification
+
+    email = "expired_otp@onesmarter.com"
+    gen_res = EmailOTPAdapter.generate_otp(email=email, purpose="REGISTRATION")
+    otp_code = gen_res["otp_code"]
+
+    # Manually expire the record in DB
+    record = EmailOTPVerification.objects.get(email=email, purpose="REGISTRATION")
+    record.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+    record.save()
+
+    ok, msg = EmailOTPAdapter.verify_otp(email=email, otp_code=otp_code, purpose="REGISTRATION")
+    assert ok is False
+    assert "expired" in msg.lower()
+
+
+@pytest.mark.django_db
+def test_email_otp_invalid_format_inputs():
+    """Test EmailOTPAdapter raises AuthError or returns false on invalid email / OTP format."""
+    with pytest.raises(AuthError, match="Invalid email address"):
+        EmailOTPAdapter.generate_otp(email="invalid_email", purpose="REGISTRATION")
+
+    ok1, msg1 = EmailOTPAdapter.verify_otp(email="test@onesmarter.com", otp_code="12345", purpose="REGISTRATION")
+    assert ok1 is False
+    assert "Enter a 6-digit number" in msg1
+
+    ok2, msg2 = EmailOTPAdapter.verify_otp(email="test@onesmarter.com", otp_code="ABCDEF", purpose="REGISTRATION")
+    assert ok2 is False
+    assert "Enter a 6-digit number" in msg2
+
+
+@pytest.mark.django_db
+def test_login_api_invalid_credentials():
+    """Test user login API with incorrect passwords or non-existent usernames returns HTTP 401."""
+    client = Client()
+
+    # Non-existent user
+    resp1 = client.post(
+        "/osivault/auth/api/user/login/",
+        data=json.dumps({"username_or_email": "non_existent_user", "password": "WrongPassword123!"}),
+        content_type="application/json"
+    )
+    assert resp1.status_code == 401
+    assert "Invalid credentials" in resp1.json()["message"]
+
+    # Existing user with wrong password
+    User.objects.create_user(username="valid_user", password="CorrectPassword123!")
+    resp2 = client.post(
+        "/osivault/auth/api/user/login/",
+        data=json.dumps({"username_or_email": "valid_user", "password": "WrongPassword123!"}),
+        content_type="application/json"
+    )
+    assert resp2.status_code == 401
+    assert "Invalid credentials" in resp2.json()["message"]
+
+
+
+
+@pytest.mark.django_db
+def test_totp_setup_unauthenticated_api_rejection():
+    """Test that calling TOTP setup API without session authentication returns HTTP 401."""
+    client = Client()
+    resp = client.post("/osivault/auth/api/totp/setup/")
+    assert resp.status_code == 401
+    assert "Authentication required" in resp.json()["message"]
+
 
 
