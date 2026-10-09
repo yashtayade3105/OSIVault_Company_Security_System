@@ -625,3 +625,188 @@ def test_register_audit_signal_automatic_and_nan_sanitization():
 
     report = verify_chain(ConcreteAuditLog)
     assert report.is_intact is True
+
+
+@pytest.mark.django_db
+def test_unicode_special_chars_emoji_payload():
+    """
+    Edge Case: Appending and verifying payloads with UTF-8 multi-language text, emojis, and special control characters.
+    """
+    unicode_actor = "yash_tayade_🚀_सुरक्षा@onesmarter.com"
+    unicode_tenant = "tenant_हिंदी_enterprise_🔐"
+    unicode_resource_id = "res_日本語_123_@#$^&*()'\"\\"
+    unicode_action = "UPDATE_ROLE_ADMIN_👑"
+
+    entry = append(
+        model_class=ConcreteAuditLog,
+        actor=unicode_actor,
+        tenant=unicode_tenant,
+        resource_type="MultiLangDoc",
+        resource_id=unicode_resource_id,
+        action=unicode_action,
+        old_values={"role": "User_ユーザー", "notes": "Line 1\nLine 2\tTabbed"},
+        new_values={"role": "Admin_管理者_👑", "notes": "Special chars: <> & \" ' € ¥ ₹"},
+    )
+
+    verified, key_used, reason = verify_entry(entry)
+    assert verified is True
+    assert key_used is not None
+
+    report = verify_chain(ConcreteAuditLog)
+    assert report.is_intact is True
+    assert report.total_count == 1
+
+
+@pytest.mark.django_db
+def test_empty_string_fields():
+    """
+    Edge Case: Appending and verifying entries with empty strings for actor, tenant, resource_type, resource_id, and action.
+    """
+    entry = append(
+        model_class=ConcreteAuditLog,
+        actor="",
+        tenant="",
+        resource_type="",
+        resource_id="",
+        action="",
+        old_values={},
+        new_values={},
+    )
+
+    verified, key_used, reason = verify_entry(entry)
+    assert verified is True
+
+    report = verify_chain(ConcreteAuditLog)
+    assert report.is_intact is True
+
+
+@pytest.mark.django_db
+def test_large_nested_json_payload():
+    """
+    Edge Case: Large nested payload structures with 100+ keys, nested lists, floats, booleans, and nulls.
+    """
+    large_payload = {
+        "user_details": {
+            "permissions": ["READ", "WRITE", "EXECUTE", "ADMIN"],
+            "metadata": {"session_id": "sess_9999", "ip": "192.168.1.1", "is_active": True},
+        },
+        "metrics": {"score": 99.85, "count": 10000, "flag": None},
+        "big_array": [{"id": i, "val": f"item_{i}"} for i in range(100)],
+    }
+
+    entry = append(
+        model_class=ConcreteAuditLog,
+        actor="system_admin@onesmarter.com",
+        tenant="tenant_heavy",
+        resource_type="ComplexConfig",
+        resource_id="cfg_001",
+        action="UPDATE_CONFIG",
+        old_values={},
+        new_values=large_payload,
+    )
+
+    verified, key_used, reason = verify_entry(entry)
+    assert verified is True
+
+    report = verify_chain(ConcreteAuditLog)
+    assert report.is_intact is True
+
+
+@pytest.mark.django_db
+def test_verify_chain_empty_table():
+    """
+    Edge Case: Verifying chain on an empty audit log table.
+    """
+    report = verify_chain(ConcreteAuditLog)
+    assert report.is_intact is True
+    assert report.total_count == 0
+    assert report.current_key_count == 0
+    assert report.previous_key_count == 0
+    assert report.failed_pk is None
+    assert report.failure_reason is None
+
+
+@pytest.mark.django_db
+def test_checkpoint_on_empty_table():
+    """
+    Edge Case: Creating and verifying a genesis checkpoint on an empty audit log table.
+    """
+    cp = checkpoint(ConcreteAuditLog)
+    assert cp is not None
+    assert cp.row_count == 0
+
+    res = verify_checkpoint(cp, ConcreteAuditLog)
+    assert res.envelope_ok is True
+    assert res.mac_ok is True
+    assert res.live_ok is True
+    assert res.chain_ok is True
+
+
+@pytest.mark.django_db
+def test_invalid_json_envelope_tampering():
+    """
+    Edge Case: Direct database alteration placing invalid JSON envelope structure (e.g. missing required fields).
+    Note: Database trigger is not installed in this test so raw SQL tampering is possible.
+    """
+    entry = append(
+        model_class=ConcreteAuditLog,
+        actor="user@onesmarter.com",
+        tenant="tenant_test",
+        resource_type="Doc",
+        resource_id="1",
+        action="READ",
+    )
+
+    with connection.cursor() as cursor:
+        cursor.execute(
+            f"UPDATE test_concrete_audit_log SET envelope = '{{\"invalid_schema\": true}}' WHERE id = {entry.pk}"
+        )
+
+    modified = ConcreteAuditLog.objects.get(pk=entry.pk)
+    verified, key_used, reason = verify_entry(modified)
+    assert verified is False
+    assert "allowlist" in reason or "Envelope" in reason
+
+
+@pytest.mark.django_db
+def test_multiple_key_rotations_long_chain():
+    """
+    Edge Case: Key rotation across multiple entries using rotate_key API.
+    Verify all entries remain verifiable across current and previous keys.
+    """
+    provider = InMemoryKeyProvider(current_key="k1_bytes_32_chars_long_secret_1", current_key_id="k1")
+    _set_default_key_provider_for_tests(provider)
+
+    # 5 entries with k1
+    for i in range(5):
+        append(
+            model_class=ConcreteAuditLog,
+            actor=f"user_{i}",
+            tenant="t1",
+            resource_type="R",
+            resource_id=str(i),
+            action="A",
+            key_provider=provider,
+        )
+
+    # Rotate to k2 using official rotate_key API
+    rotate_key(new_current_key="k2_bytes_32_chars_long_secret_2", new_key_id="k2", key_provider=provider)
+
+    for i in range(5, 10):
+        append(
+            model_class=ConcreteAuditLog,
+            actor=f"user_{i}",
+            tenant="t1",
+            resource_type="R",
+            resource_id=str(i),
+            action="A",
+            key_provider=provider,
+        )
+
+    report = verify_chain(ConcreteAuditLog, key_provider=provider)
+    assert report.is_intact is True
+    assert report.total_count == 10
+    assert report.current_key_count == 5
+    assert report.previous_key_count == 5
+
+
