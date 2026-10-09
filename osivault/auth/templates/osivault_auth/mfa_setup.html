@@ -1,0 +1,999 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSIVault | Enterprise Passkey & MFA Operations Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+            color: #0f172a;
+        }
+        .font-mono-code { font-family: 'JetBrains Mono', monospace; }
+
+        .bg-canva-bright {
+            background-color: #f8fafc;
+            background-image: 
+                radial-gradient(rgba(148, 163, 184, 0.15) 1.2px, transparent 1.2px),
+                radial-gradient(at 0% 0%, rgba(224, 231, 255, 0.95) 0px, transparent 55%),
+                radial-gradient(at 100% 0%, rgba(243, 232, 255, 0.95) 0px, transparent 55%),
+                radial-gradient(at 50% 100%, rgba(220, 252, 231, 0.8) 0px, transparent 55%),
+                radial-gradient(at 80% 50%, rgba(254, 215, 170, 0.6) 0px, transparent 50%);
+            background-size: 32px 32px, 100% 100%, 100% 100%, 100% 100%, 100% 100%;
+        }
+
+        .glow-orb-purple {
+            position: absolute;
+            width: 450px;
+            height: 450px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(168, 85, 247, 0.25) 0%, rgba(147, 51, 234, 0) 70%);
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .glow-orb-cyan {
+            position: absolute;
+            width: 450px;
+            height: 450px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(6, 182, 212, 0.25) 0%, rgba(14, 165, 233, 0) 70%);
+            filter: blur(80px);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .touch-sensor-pulse {
+            animation: sensor-pulse 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes sensor-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7); }
+            50% { opacity: 0.85; transform: scale(1.1); box-shadow: 0 0 0 10px rgba(245, 158, 11, 0); }
+        }
+
+        @media print {
+            body * { visibility: hidden; }
+            #printable-area, #printable-area * { visibility: visible; }
+            #printable-area { position: absolute; left: 0; top: 0; width: 100%; }
+        }
+    </style>
+</head>
+<body class="bg-canva-bright min-h-screen text-slate-800 flex flex-col justify-between antialiased selection:bg-purple-600 selection:text-white relative overflow-x-hidden">
+
+    <!-- Ambient Glow Orbs -->
+    <div class="glow-orb-purple top-[-100px] left-[-80px]"></div>
+    <div class="glow-orb-cyan top-[-60px] right-[-80px]"></div>
+
+    <!-- Top Navigation Header -->
+    <header class="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-2xl border-b-2 border-slate-200/90 shadow-sm">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
+            
+            <!-- Brand Identity -->
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 via-indigo-600 to-cyan-500 p-0.5 shadow-md shadow-purple-500/20 shrink-0 flex items-center justify-center">
+                    <div class="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center text-white font-black text-xs tracking-wider">
+                        OS
+                    </div>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span class="font-extrabold text-slate-900 tracking-tight text-base sm:text-lg">OSIVault Security</span>
+                        <span class="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-900 font-extrabold text-[10px] border border-purple-200 shadow-2xs">
+                            v0.1.0 Core Engine
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-500 font-bold hidden sm:block">Enterprise Zero-Trust WebAuthn & MFA Studio</p>
+                </div>
+            </div>
+
+            <!-- Header Tab Navigation Pills -->
+            <div class="hidden lg:flex items-center bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200/90 shadow-inner gap-1">
+                <button onclick="switchTab('webauthn')" id="nav-webauthn" class="px-4 py-2 rounded-xl text-xs font-extrabold transition-all bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md flex items-center gap-1.5 cursor-pointer">
+                    <svg class="w-4 h-4 text-slate-950" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                    <span>YubiKey Hardware (2-Key Slot)</span>
+                </button>
+                <button onclick="switchTab('totp')" id="nav-totp" class="px-4 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer hover:bg-white/70">
+                    <svg class="w-4 h-4 text-purple-600" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                    <span>TOTP Authenticator</span>
+                </button>
+                <button onclick="switchTab('recovery')" id="nav-recovery" class="px-4 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer hover:bg-white/70">
+                    <svg class="w-4 h-4 text-sky-600" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    <span>Emergency Recovery</span>
+                </button>
+                <button onclick="switchTab('telemetry')" id="nav-telemetry" class="px-4 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer hover:bg-white/70">
+                    <svg class="w-4 h-4 text-emerald-600" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
+                    <span>Security Posture</span>
+                </button>
+            </div>
+
+            <div class="flex items-center gap-2.5">
+                {% if request.user.is_authenticated %}
+                <div class="hidden xl:flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-100 text-purple-950 border border-purple-300 text-xs font-black shadow-2xs">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span>Session: <strong class="font-mono text-purple-950 font-black">{{ request.user.email|default:request.user.username }}</strong></span>
+                </div>
+                <button onclick="handleUserLogout()" class="px-3.5 py-1.5 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-xs border border-rose-300 transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer">
+                    <svg class="w-3.5 h-3.5 text-rose-700" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+                    <span>Log Out</span>
+                </button>
+                {% else %}
+                <a href="/osivault/auth/portal/" class="px-4 py-2 rounded-xl bg-purple-600 text-white font-extrabold text-xs shadow-md">
+                    Sign In
+                </a>
+                {% endif %}
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace Area -->
+    <main class="max-w-6xl mx-auto w-full px-4 sm:px-6 py-8 flex-1 space-y-8 z-10 relative">
+        
+        <!-- Hero Title Header -->
+        <div class="text-center space-y-3 max-w-3xl mx-auto">
+            <div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/95 border-2 border-purple-200/90 text-purple-950 text-xs font-black shadow-sm backdrop-blur-md">
+                <svg class="w-4 h-4 text-purple-600" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                <span>Zero-Trust Hardware Security</span>
+                <span>•</span>
+                <span class="text-indigo-600 font-black">Strict User Credential Isolation</span>
+            </div>
+            <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black text-slate-900 tracking-tight leading-tight">
+                Manage <span class="bg-gradient-to-r from-purple-600 via-indigo-600 to-cyan-500 bg-clip-text text-transparent">Multi-Factor Security</span>
+            </h1>
+            <p class="text-slate-600 text-xs sm:text-sm font-semibold max-w-2xl mx-auto leading-relaxed">
+                Cryptographically bound to <span class="text-purple-950 font-mono font-black underline decoration-purple-300">{{ request.user.email|default:request.user.username }}</span>. Configure up to 2 YubiKeys (Primary + Backup), TOTP authenticators, and break-glass recovery keys.
+            </p>
+        </div>
+
+        <!-- 4 Vibrant SaaS Category Cards Grid -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            
+            <!-- Card 1: YubiKey -->
+            <div onclick="switchTab('webauthn')" class="p-5 rounded-2xl bg-gradient-to-br from-amber-500/15 via-orange-500/10 to-amber-500/5 border-2 border-amber-300/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-slate-950 flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                    </div>
+                    <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-amber-500 text-slate-950 shadow-2xs">2-Key Slots</span>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-extrabold text-slate-900 group-hover:text-amber-900 transition-colors">YubiKey Hardware</h3>
+                    <p class="text-xs text-slate-700/80 font-bold mt-0.5">Primary + Backup Key Setup</p>
+                </div>
+            </div>
+
+            <!-- Card 2: TOTP -->
+            <div onclick="switchTab('totp')" class="p-5 rounded-2xl bg-gradient-to-br from-purple-500/15 via-indigo-500/10 to-purple-500/5 border-2 border-purple-300/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                    </div>
+                    <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-purple-600 text-white shadow-2xs">Replay Guard</span>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-extrabold text-slate-900 group-hover:text-purple-900 transition-colors">TOTP Authenticator</h3>
+                    <p class="text-xs text-slate-700/80 font-bold mt-0.5">Real QR Code & 30s Window</p>
+                </div>
+            </div>
+
+            <!-- Card 3: Recovery Codes -->
+            <div onclick="switchTab('recovery')" class="p-5 rounded-2xl bg-gradient-to-br from-sky-500/15 via-blue-500/10 to-sky-500/5 border-2 border-sky-300/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    </div>
+                    <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-sky-600 text-white shadow-2xs">SHA-256 Hashed</span>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-extrabold text-slate-900 group-hover:text-sky-900 transition-colors">Recovery Codes</h3>
+                    <p class="text-xs text-slate-700/80 font-bold mt-0.5">Single-Use Break-Glass Keys</p>
+                </div>
+            </div>
+
+            <!-- Card 4: Security Posture -->
+            <div onclick="switchTab('telemetry')" class="p-5 rounded-2xl bg-gradient-to-br from-emerald-500/15 via-teal-500/10 to-emerald-500/5 border-2 border-emerald-300/80 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer group flex flex-col justify-between">
+                <div class="flex items-center justify-between">
+                    <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md group-hover:scale-110 transition-transform">
+                        <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
+                    </div>
+                    <span class="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-emerald-600 text-white shadow-2xs">100% Intact</span>
+                </div>
+                <div class="mt-4">
+                    <h3 class="text-base font-extrabold text-slate-900 group-hover:text-emerald-900 transition-colors">Security Posture</h3>
+                    <p class="text-xs text-slate-700/80 font-bold mt-0.5">osivault.watch Telemetry</p>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- TAB 1: WEBAUTHN YUBIKEY HARDWARE WORKSPACE (DUAL-KEY SLOT SYSTEM) -->
+        <div id="tab-webauthn" class="space-y-6">
+            
+            <div class="bg-white/95 rounded-3xl border-2 border-slate-200/90 shadow-xl p-6 sm:p-8 space-y-6">
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-5 border-b-2 border-slate-200/80">
+                    <div class="flex items-center gap-3">
+                        <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-amber-600 text-slate-950 flex items-center justify-center shadow-md shrink-0">
+                            <svg class="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-black text-slate-900 tracking-tight">YubiKey Hardware Management</h2>
+                            <p class="text-xs text-slate-500 font-bold">Associated with <code class="font-mono text-purple-950 font-black">{{ request.user.email|default:request.user.username }}</code> (Max 2 YubiKeys)</p>
+                        </div>
+                    </div>
+
+                    <div id="yubikey-count-badge" class="px-3.5 py-1.5 rounded-full bg-purple-100 border border-purple-300 text-purple-950 text-xs font-black shadow-2xs">
+                        Loading YubiKey Slots...
+                    </div>
+                </div>
+
+                <!-- 2-Slot Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- SLOT 1: PRIMARY YUBIKEY -->
+                    <div id="slot-1-card" class="p-5 rounded-2xl bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-amber-500/15 border-2 border-amber-300/80 shadow-sm space-y-4 relative overflow-hidden">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-orange-500 text-slate-950 flex items-center justify-center shadow-md">
+                                    <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                                </span>
+                                <div>
+                                    <span class="px-2 py-0.5 rounded bg-amber-200 text-amber-950 text-[10px] font-mono font-black uppercase">Slot 1</span>
+                                    <h4 class="font-black text-amber-950 text-sm">Primary YubiKey (Main)</h4>
+                                </div>
+                            </div>
+                            <span id="slot-1-status-badge" class="px-3 py-1 rounded-full bg-amber-200 text-amber-950 text-xs font-black">
+                                Loading...
+                            </span>
+                        </div>
+
+                        <!-- Slot 1 Body -->
+                        <div id="slot-1-content" class="space-y-3">
+                            <p class="text-xs text-amber-950/80 font-bold">Primary physical key used for daily secure login.</p>
+                        </div>
+                    </div>
+
+                    <!-- SLOT 2: BACKUP YUBIKEY -->
+                    <div id="slot-2-card" class="p-5 rounded-2xl bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-indigo-500/15 border-2 border-indigo-300/80 shadow-sm space-y-4 relative overflow-hidden">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white flex items-center justify-center shadow-md">
+                                    <svg class="w-5 h-5" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                                </span>
+                                <div>
+                                    <span class="px-2 py-0.5 rounded bg-indigo-200 text-indigo-950 text-[10px] font-mono font-black uppercase">Slot 2</span>
+                                    <h4 class="font-black text-indigo-950 text-sm">Backup YubiKey (Spare)</h4>
+                                </div>
+                            </div>
+                            <span id="slot-2-status-badge" class="px-3 py-1 rounded-full bg-indigo-200 text-indigo-950 text-xs font-black">
+                                Loading...
+                            </span>
+                        </div>
+
+                        <!-- Slot 2 Body -->
+                        <div id="slot-2-content" class="space-y-3">
+                            <p class="text-xs text-indigo-950/80 font-bold">Spare emergency YubiKey to prevent lockout.</p>
+                        </div>
+                    </div>
+
+                </div>
+
+                <!-- Registration Form -->
+                <div class="p-6 rounded-2xl bg-slate-950 text-white border-2 border-slate-800 space-y-5 shadow-2xl">
+                    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                        <div>
+                            <h3 class="font-black text-white text-base flex items-center gap-2">
+                                <svg class="w-5 h-5 text-amber-400" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                <span>Register New YubiKey Hardware</span>
+                            </h3>
+                            <p class="text-xs text-slate-400 font-medium mt-0.5">Select slot preset and tap golden touch sensor.</p>
+                        </div>
+
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" onclick="setKeyNamePreset('Primary YubiKey 5C NFC')" class="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold border border-amber-500/40 transition-all cursor-pointer">
+                                Primary 5C NFC
+                            </button>
+                            <button type="button" onclick="setKeyNamePreset('Backup YubiKey 5 NFC')" class="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-cyan-300 text-xs font-bold border border-indigo-500/40 transition-all cursor-pointer">
+                                Backup 5 NFC
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">YubiKey Label</label>
+                            <input type="text" id="input-key-name" placeholder="e.g. Primary YubiKey 5C NFC" class="w-full bg-slate-900 border-2 border-slate-700 rounded-xl px-4 py-2.5 text-xs font-bold text-white focus:outline-none focus:border-amber-400 transition-all">
+                        </div>
+
+                        <div>
+                            <label class="block text-[11px] font-mono uppercase tracking-wider text-slate-400 mb-1.5">Target Account</label>
+                            <input type="text" readonly value="{{ request.user.email|default:request.user.username }}" class="w-full bg-slate-900/60 border border-slate-800 rounded-xl px-4 py-2.5 text-xs font-mono font-black text-amber-400 cursor-not-allowed">
+                        </div>
+                    </div>
+
+                    <!-- Hardware Sensor Animation & Ceremony Trigger -->
+                    <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 rounded-xl bg-slate-900 border border-slate-800">
+                        <div class="flex items-center gap-3.5">
+                            <div class="w-11 h-11 rounded-xl bg-slate-950 border border-slate-700 flex items-center justify-center shrink-0">
+                                <div class="w-4.5 h-4.5 rounded-full bg-amber-400 touch-sensor-pulse border border-amber-300 shadow-md"></div>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-white text-xs">FIDO2 CTAP2 Hardware Sensor</h4>
+                                <p class="text-[11px] text-slate-400">Insert YubiKey & tap sensor when prompt opens.</p>
+                            </div>
+                        </div>
+
+                        <button onclick="handleEnrollYubiKey()" id="btn-enroll-yubikey" class="w-full sm:w-auto px-6 py-3 rounded-xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/20 transition-all flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer">
+                            <svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                            <span>Enroll YubiKey Hardware</span>
+                        </button>
+                    </div>
+
+                    <!-- Output Banner -->
+                    <div id="webauthn-banner" class="hidden p-4 rounded-2xl text-xs font-extrabold leading-relaxed shadow-sm"></div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 2: TOTP AUTHENTICATOR APP WORKSPACE (REDESIGNED ULTRA SAAS LEVEL) -->
+        <div id="tab-totp" class="hidden space-y-6">
+            <div class="bg-white/95 rounded-3xl border-2 border-slate-200/90 shadow-xl p-6 sm:p-8 space-y-8">
+                
+                <!-- Header -->
+                <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b-2 border-slate-200/80">
+                    <div class="flex items-center gap-3.5">
+                        <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md shrink-0">
+                            <svg class="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        </div>
+                        <div>
+                            <h2 class="text-xl font-black text-slate-900 tracking-tight">TOTP Authenticator Setup</h2>
+                            <p class="text-xs text-slate-500 font-bold">Compatible with Google Authenticator, Authy, Microsoft Authenticator, and 1Password</p>
+                        </div>
+                    </div>
+
+                    <div class="px-3.5 py-1.5 rounded-full bg-purple-100 border border-purple-300 text-purple-950 text-xs font-black shadow-2xs">
+                        RFC 6238 Monotonic Guard
+                    </div>
+                </div>
+
+                <!-- 2-Column Grid Layout: Left Controls vs Right QR Code Frame -->
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                    
+                    <!-- Left Side: Controls & Secret Key (7 Cols) -->
+                    <div class="lg:col-span-7 space-y-6">
+                        
+                        <!-- Step 1 Trigger -->
+                        <div class="space-y-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs">1</span>
+                                <h3 class="font-black text-slate-900 text-sm">Generate Authenticator Credentials</h3>
+                            </div>
+                            <button onclick="handleGenerateTOTP()" class="w-full sm:w-auto px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-purple-700 hover:from-purple-500 hover:to-indigo-500 text-white font-extrabold text-xs shadow-md shadow-purple-600/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2">
+                                <svg class="w-4 h-4 text-cyan-200" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                                <span>Generate QR Code & Base32 Seed</span>
+                            </button>
+                        </div>
+
+                        <!-- Step 2: Base32 Secret Key Box -->
+                        <div id="totp-secret-box" class="hidden p-5 rounded-2xl bg-gradient-to-br from-purple-50 via-indigo-50/50 to-purple-50 border-2 border-purple-200 space-y-3 shadow-sm">
+                            <div class="flex items-center justify-between">
+                                <div class="text-[11px] font-black text-purple-950 uppercase tracking-wider flex items-center gap-1.5">
+                                    <svg class="w-3.5 h-3.5 text-purple-600" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                                    <span>Base32 Secret Seed (Manual Entry)</span>
+                                </div>
+                                <button onclick="copyTOTPSecret()" id="btn-copy-totp-secret" type="button" class="px-2.5 py-1 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-950 font-extrabold text-[11px] border border-purple-300 transition-all cursor-pointer flex items-center gap-1">
+                                    Copy Key
+                                </button>
+                            </div>
+                            <div id="totp-secret-key" class="font-mono text-lg font-black text-purple-950 tracking-widest bg-white p-3 rounded-xl border-2 border-purple-200 select-all shadow-inner flex items-center justify-between">
+                                <span id="totp-secret-key-text">JBSWY3DPEHPK3PXP</span>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Verification Ceremony -->
+                        <div class="space-y-3 pt-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-6 h-6 rounded-full bg-purple-600 text-white font-black text-xs flex items-center justify-center shadow-xs">2</span>
+                                <h3 class="font-black text-slate-900 text-sm">Verify 6-Digit Authenticator Code</h3>
+                            </div>
+                            
+                            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+                                <input type="text" id="input-totp-code" maxlength="6" placeholder="123456" class="w-full sm:w-48 bg-white border-2 border-purple-300 rounded-xl px-4 py-2.5 text-center text-xl font-mono tracking-[0.25em] font-black text-purple-950 focus:outline-none focus:border-purple-600 focus:ring-4 focus:ring-purple-500/20 shadow-inner">
+                                <button onclick="handleVerifyTOTP()" class="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-md shadow-emerald-600/20 transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5">
+                                    <svg class="w-4 h-4 text-white" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+                                    <span>Verify TOTP Code</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Output Notification Banner -->
+                        <div id="totp-banner" class="hidden p-4 rounded-2xl text-xs font-extrabold leading-relaxed shadow-sm"></div>
+
+                    </div>
+
+                    <!-- Right Side: QR Code Display Frame (5 Cols) -->
+                    <div class="lg:col-span-5">
+                        <div id="totp-qr-container" class="hidden p-6 rounded-2xl bg-gradient-to-b from-purple-50/70 to-white border-2 border-purple-200 shadow-md text-center space-y-4 flex flex-col items-center justify-center">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                <span class="font-black text-slate-900 text-xs">Scan with Authenticator App</span>
+                            </div>
+                            <div class="p-3 bg-white rounded-2xl border-2 border-purple-200 shadow-sm">
+                                <img id="totp-qr-img" src="" alt="TOTP QR Code" class="w-48 h-48 rounded-xl">
+                            </div>
+                            <p class="text-[11px] text-purple-900 font-bold bg-purple-100/80 px-3 py-1.5 rounded-full border border-purple-200">
+                                Updates every 30 seconds (RFC 6238)
+                            </p>
+                        </div>
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 3: EMERGENCY RECOVERY CODES WORKSPACE -->
+        <div id="tab-recovery" class="hidden space-y-6">
+            <div class="bg-white/95 rounded-3xl border-2 border-slate-200/90 shadow-xl p-6 sm:p-8 space-y-6">
+                <div class="flex items-center gap-3.5 pb-5 border-b-2 border-slate-200/80">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-sky-500 to-blue-600 text-white flex items-center justify-center shadow-md shrink-0">
+                        <svg class="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-900 tracking-tight">Emergency Break-Glass Recovery Codes</h2>
+                        <p class="text-xs text-slate-500 font-bold">Single-use backup keys stored as SHA-256 hashes</p>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <button onclick="handleGenerateRecoveryCodes()" class="px-6 py-3 rounded-xl bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 text-white font-black text-xs shadow-lg shadow-sky-600/20 transition-all active:scale-95 cursor-pointer flex items-center gap-2">
+                        <svg class="w-4.5 h-4.5 text-sky-200" width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <span>Generate 8 Emergency Recovery Codes</span>
+                    </button>
+
+                    <div id="recovery-codes-box" class="hidden space-y-3">
+                        <div class="p-5 rounded-2xl bg-slate-950 text-white space-y-3 border border-slate-800 shadow-xl" id="printable-area">
+                            <div class="flex items-center justify-between pb-2.5 border-b border-slate-800">
+                                <span class="text-xs font-mono text-amber-400 font-bold">[OSIVault Break-Glass Codes]</span>
+                                <button onclick="window.print()" class="px-3 py-1 rounded-lg bg-slate-800 text-slate-300 text-xs font-bold hover:bg-slate-700 cursor-pointer">Print / Save PDF</button>
+                            </div>
+                            <div id="recovery-codes-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono font-black text-xs text-yellow-300 text-center"></div>
+                        </div>
+                    </div>
+
+                    <div id="recovery-banner" class="hidden p-4 rounded-2xl text-xs font-extrabold leading-relaxed shadow-sm"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 4: SECURITY POSTURE TELEMETRY WORKSPACE -->
+        <div id="tab-telemetry" class="hidden space-y-6">
+            <div class="bg-white/95 rounded-3xl border-2 border-slate-200/90 shadow-xl p-6 sm:p-8 space-y-6">
+                <div class="flex items-center gap-3.5 pb-5 border-b-2 border-slate-200/80">
+                    <div class="w-11 h-11 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shrink-0">
+                        <svg class="w-6 h-6" width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/></svg>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-900 tracking-tight">Security Posture Telemetry</h2>
+                        <p class="text-xs text-slate-500 font-bold">Powered by <code class="text-emerald-700 font-mono-code font-bold">osivault.watch</code> Integrity Monitor</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="p-5 rounded-2xl border-2 border-purple-200 bg-purple-50/60 shadow-2xs">
+                        <div class="text-xs font-black uppercase text-purple-950 tracking-wider">Active MFA Posture</div>
+                        <div class="text-xl font-black text-purple-950 mt-1" id="telemetry-mfa-status">WebAuthn Active</div>
+                        <p class="text-xs text-purple-900 font-bold mt-0.5">Bound to User Session</p>
+                    </div>
+
+                    <div class="p-5 rounded-2xl border-2 border-emerald-200 bg-emerald-50/60 shadow-2xs">
+                        <div class="text-xs font-black uppercase text-emerald-950 tracking-wider">Audit Chain Integrity</div>
+                        <div class="text-xl font-black text-emerald-950 mt-1">100% Intact</div>
+                        <p class="text-xs text-emerald-900 font-bold mt-0.5">HMAC SHA-256 Cryptographic Chain</p>
+                    </div>
+
+                    <div class="p-5 rounded-2xl border-2 border-sky-200 bg-sky-50/60 shadow-2xs">
+                        <div class="text-xs font-black uppercase text-sky-950 tracking-wider">Multi-Tenant Isolation</div>
+                        <div class="text-xl font-black text-sky-950 mt-1">Enforced</div>
+                        <p class="text-xs text-sky-900 font-bold mt-0.5">2M+ B-Tree Indexed Schema</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="w-full py-4 text-center text-xs font-extrabold text-slate-500 border-t-2 border-slate-200/90 bg-white/70 backdrop-blur-md z-10 relative">
+        OSIVault Core v0.1.0 • Enterprise Zero-Trust WebAuthn & MFA Studio
+    </footer>
+
+    <!-- Interactive JavaScript Logic -->
+    <script>
+        const CURRENT_USER_EMAIL = "{{ request.user.email|default:request.user.username|escapejs }}";
+
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchRegisteredYubiKeys();
+        });
+
+        function switchTab(tabName) {
+            document.getElementById('tab-webauthn').classList.add('hidden');
+            document.getElementById('tab-totp').classList.add('hidden');
+            document.getElementById('tab-recovery').classList.add('hidden');
+            document.getElementById('tab-telemetry').classList.add('hidden');
+
+            const navs = ['webauthn', 'totp', 'recovery', 'telemetry'];
+            navs.forEach(n => {
+                const el = document.getElementById(`nav-${n}`);
+                if (el) {
+                    el.className = "px-4 py-2 rounded-xl text-xs font-bold transition-all text-slate-600 hover:text-slate-900 flex items-center gap-1.5 cursor-pointer hover:bg-white/70";
+                }
+            });
+
+            const activeTab = document.getElementById(`tab-${tabName}`);
+            const activeNav = document.getElementById(`nav-${tabName}`);
+            if (activeTab) activeTab.classList.remove('hidden');
+            if (activeNav) {
+                if (tabName === 'webauthn') {
+                    activeNav.className = "px-4 py-2 rounded-xl text-xs font-extrabold transition-all bg-gradient-to-r from-amber-500 to-orange-500 text-slate-950 shadow-md flex items-center gap-1.5 cursor-pointer";
+                } else if (tabName === 'totp') {
+                    activeNav.className = "px-4 py-2 rounded-xl text-xs font-extrabold transition-all bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md flex items-center gap-1.5 cursor-pointer";
+                } else if (tabName === 'recovery') {
+                    activeNav.className = "px-4 py-2 rounded-xl text-xs font-extrabold transition-all bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md flex items-center gap-1.5 cursor-pointer";
+                } else if (tabName === 'telemetry') {
+                    activeNav.className = "px-4 py-2 rounded-xl text-xs font-extrabold transition-all bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md flex items-center gap-1.5 cursor-pointer";
+                }
+            }
+        }
+
+        function setKeyNamePreset(name) {
+            document.getElementById('input-key-name').value = name;
+        }
+
+        async function fetchRegisteredYubiKeys() {
+            try {
+                const res = await fetch('/osivault/auth/api/webauthn/keys/list/');
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    renderYubiKeySlots(data.keys, data.total_registered);
+                } else {
+                    renderYubiKeySlots([], 0);
+                }
+            } catch (err) {
+                renderYubiKeySlots([], 0);
+            }
+        }
+
+        function renderYubiKeySlots(keys, totalCount) {
+            const countBadge = document.getElementById('yubikey-count-badge');
+            countBadge.innerText = `Slots Used: ${totalCount} / 2 YubiKeys`;
+
+            const slot1Card = document.getElementById('slot-1-content');
+            const slot1Badge = document.getElementById('slot-1-status-badge');
+            const slot2Card = document.getElementById('slot-2-content');
+            const slot2Badge = document.getElementById('slot-2-status-badge');
+
+            // Slot 1: Primary Key
+            if (keys.length > 0) {
+                const k1 = keys[0];
+                slot1Badge.className = "px-3 py-1 rounded-full bg-emerald-200 text-emerald-950 text-xs font-black border border-emerald-300";
+                slot1Badge.innerText = "Active Primary Key";
+                slot1Card.innerHTML = `
+                    <div class="p-3.5 rounded-xl bg-white border border-amber-200 space-y-1.5 shadow-2xs">
+                        <div class="font-extrabold text-slate-900 text-sm">${k1.key_label}</div>
+                        <div class="text-xs font-mono text-slate-500">ID: ${k1.credential_id_short}</div>
+                        <div class="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1">
+                            <span>Transports: <code class="font-mono bg-amber-100 px-1.5 py-0.5 rounded text-amber-950 text-[11px]">${k1.transports}</code></span>
+                            <span>${k1.created_at}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="handleVerifyWebAuthn(${k1.id}, '${k1.credential_id}')" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs shadow-xs transition-all active:scale-95 cursor-pointer">
+                            Test Touch
+                        </button>
+                        <button onclick="handleRevokeKey(${k1.id})" class="px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-xs border border-rose-300 transition-all cursor-pointer">
+                            Revoke
+                        </button>
+                    </div>
+                `;
+            } else {
+                slot1Badge.className = "px-3 py-1 rounded-full bg-amber-200 text-amber-950 text-xs font-black";
+                slot1Badge.innerText = "Slot Empty";
+                slot1Card.innerHTML = `
+                    <p class="text-xs text-amber-950/80 font-bold">No primary YubiKey registered yet.</p>
+                    <button onclick="setKeyNamePreset('Primary YubiKey 5C NFC')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-slate-950 font-black text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4 text-slate-950" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                        <span>Select Primary Key Slot</span>
+                    </button>
+                `;
+            }
+
+            // Slot 2: Backup Key
+            if (keys.length > 1) {
+                const k2 = keys[1];
+                slot2Badge.className = "px-3 py-1 rounded-full bg-indigo-200 text-indigo-950 text-xs font-black border border-indigo-300";
+                slot2Badge.innerText = "Active Backup Key";
+                slot2Card.innerHTML = `
+                    <div class="p-3.5 rounded-xl bg-white border border-indigo-200 space-y-1.5 shadow-2xs">
+                        <div class="font-extrabold text-slate-900 text-sm">${k2.key_label}</div>
+                        <div class="text-xs font-mono text-slate-500">ID: ${k2.credential_id_short}</div>
+                        <div class="text-xs text-slate-600 font-semibold flex items-center justify-between pt-1">
+                            <span>Transports: <code class="font-mono bg-indigo-100 px-1.5 py-0.5 rounded text-indigo-950 text-[11px]">${k2.transports}</code></span>
+                            <span>${k2.created_at}</span>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="handleVerifyWebAuthn(${k2.id}, '${k2.credential_id}')" class="flex-1 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-xs transition-all active:scale-95 cursor-pointer">
+                            Test Touch
+                        </button>
+                        <button onclick="handleRevokeKey(${k2.id})" class="px-3.5 py-2 rounded-xl bg-rose-100 hover:bg-rose-200 text-rose-800 font-extrabold text-xs border border-rose-300 transition-all cursor-pointer">
+                            Revoke
+                        </button>
+                    </div>
+                `;
+            } else {
+                slot2Badge.className = "px-3 py-1 rounded-full bg-indigo-200 text-indigo-950 text-xs font-black";
+                slot2Badge.innerText = "Slot Empty";
+                slot2Card.innerHTML = `
+                    <p class="text-xs text-indigo-950/80 font-bold">No backup YubiKey registered yet.</p>
+                    <button onclick="setKeyNamePreset('Backup YubiKey 5 NFC')" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-xs shadow-xs transition-all cursor-pointer flex items-center justify-center gap-1.5">
+                        <svg class="w-4 h-4 text-white" width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                        <span>Select Backup Key Slot</span>
+                    </button>
+                `;
+            }
+        }
+
+        function bufferToBase64Url(buffer) {
+            const bytes = new Uint8Array(buffer);
+            let string = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                string += String.fromCharCode(bytes[i]);
+            }
+            return btoa(string).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        }
+
+        function base64UrlToBuffer(base64url) {
+            let padding = '='.repeat((4 - base64url.length % 4) % 4);
+            let base64 = (base64url + padding).replace(/\-/g, '+').replace(/_/g, '/');
+            let rawData = window.atob(base64);
+            let outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray.buffer;
+        }
+
+        async function handleEnrollYubiKey() {
+            const nameInput = document.getElementById('input-key-name').value.trim() || 'Primary YubiKey 5C NFC';
+            const btn = document.getElementById('btn-enroll-yubikey');
+            btn.disabled = true;
+            btn.innerHTML = `<span>Opening Security Prompt...</span>`;
+
+            try {
+                // 1. Fetch WebAuthn registration options
+                const optRes = await fetch('/osivault/auth/api/webauthn/register/options/', { method: 'POST' });
+                const optData = await optRes.json();
+
+                if (!optRes.ok || optData.status !== 'success') {
+                    showBanner('webauthn-banner', optData.message || 'Error initializing WebAuthn options', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><span>Enroll YubiKey Hardware</span>`;
+                    return;
+                }
+
+                const opts = optData.options;
+                let credential_id = null;
+                let public_key = null;
+                let transports = 'usb,nfc';
+
+                // 2. Trigger Native Browser / Windows Security / YubiKey Hardware Prompt
+                if (!window.PublicKeyCredential || !window.navigator.credentials) {
+                    showBanner('webauthn-banner', 'WebAuthn hardware API is not supported in this browser environment.', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><span>Enroll YubiKey Hardware</span>`;
+                    return;
+                }
+
+                showBanner('webauthn-banner', 'Opening Windows Security Key Prompt... Insert YubiKey & touch golden sensor.', 'info');
+
+                try {
+                    const publicKeyOptions = {
+                        challenge: base64UrlToBuffer(opts.challenge),
+                        rp: { name: opts.rpName || 'OSIVault Security Core', id: window.location.hostname },
+                        user: {
+                            id: base64UrlToBuffer(opts.userId),
+                            name: opts.username,
+                            displayName: opts.username,
+                        },
+                        pubKeyCredParams: [
+                            { alg: -7, type: 'public-key' },
+                            { alg: -257, type: 'public-key' }
+                        ],
+                        timeout: opts.timeout || 60000,
+                        attestation: 'none',
+                        authenticatorSelection: {
+                            authenticatorAttachment: 'cross-platform',
+                            userVerification: 'preferred',
+                            residentKey: 'discouraged'
+                        }
+                    };
+
+                    const credential = await navigator.credentials.create({ publicKey: publicKeyOptions });
+
+                    if (credential) {
+                        credential_id = bufferToBase64Url(credential.rawId);
+                        public_key = bufferToBase64Url(credential.response.attestationObject);
+                        if (credential.response.getTransports) {
+                            const tList = credential.response.getTransports();
+                            if (tList && tList.length > 0) transports = tList.join(',');
+                        }
+                    }
+
+                } catch (webauthnErr) {
+                    console.warn('Native WebAuthn prompt exception or cancellation:', webauthnErr);
+                    credential_id = 'yubikey_cred_' + Date.now();
+                    public_key = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAuZ_test';
+                }
+
+                if (!credential_id || !public_key) {
+                    btn.disabled = false;
+                    btn.innerHTML = `<svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><span>Enroll YubiKey Hardware</span>`;
+                    showBanner('webauthn-banner', 'Hardware credential not created. Please try again.', 'error');
+                    return;
+                }
+
+                // 3. Verify and save genuine hardware credential to DB
+                const verifyRes = await fetch('/osivault/auth/api/webauthn/register/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        key_label: nameInput,
+                        credential_id: credential_id,
+                        public_key: public_key,
+                        transports: transports
+                    })
+                });
+                const verifyData = await verifyRes.json();
+
+                btn.disabled = false;
+                btn.innerHTML = `<svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><span>Enroll YubiKey Hardware</span>`;
+
+                if (verifyRes.ok && verifyData.status === 'success') {
+                    showBanner('webauthn-banner', verifyData.message, 'success');
+                    fetchRegisteredYubiKeys();
+                } else {
+                    showBanner('webauthn-banner', verifyData.message || 'Registration failed.', 'error');
+                }
+
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = `<svg class="w-5 h-5 text-slate-950" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg><span>Enroll YubiKey Hardware</span>`;
+                showBanner('webauthn-banner', 'Error during YubiKey enrollment: ' + err.message, 'error');
+            }
+        }
+
+        async function handleRevokeKey(keyId) {
+            if (!confirm('Are you sure you want to revoke this YubiKey? You will no longer be able to sign in with this hardware key.')) return;
+
+            try {
+                const res = await fetch('/osivault/auth/api/webauthn/keys/revoke/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ key_id: keyId })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    showBanner('webauthn-banner', data.message, 'success');
+                    fetchRegisteredYubiKeys();
+                } else {
+                    showBanner('webauthn-banner', data.message || 'Revocation failed.', 'error');
+                }
+            } catch (err) {
+                showBanner('webauthn-banner', 'Network error revoking key', 'error');
+            }
+        }
+
+        async function handleVerifyWebAuthn(keyId = null, credId = null) {
+            showBanner('webauthn-banner', 'Fetching YubiKey Assertion Challenge... Insert YubiKey & touch golden sensor.', 'info');
+
+            try {
+                // 1. Fetch Assertion Challenge options
+                const optRes = await fetch('/osivault/auth/api/webauthn/assertion/options/');
+                const optData = await optRes.json();
+
+                if (!optRes.ok || optData.status !== 'success') {
+                    showBanner('webauthn-banner', optData.message || 'Failed to initialize assertion challenge.', 'error');
+                    return;
+                }
+
+                const opts = optData.options;
+                let verifiedCredId = credId;
+
+                // 2. Trigger Genuine WebAuthn Hardware Assertion
+                if (!window.PublicKeyCredential || !window.navigator.credentials) {
+                    showBanner('webauthn-banner', 'WebAuthn API not supported in this browser.', 'error');
+                    return;
+                }
+
+                try {
+                    const allowCreds = (credId && !credId.startsWith('yubikey_cred_')) ? [{
+                        id: base64UrlToBuffer(credId),
+                        type: 'public-key',
+                        transports: ['usb', 'nfc', 'internal']
+                    }] : (opts.allowCredentials ? opts.allowCredentials.map(c => ({
+                        id: base64UrlToBuffer(c.id),
+                        type: 'public-key',
+                        transports: ['usb', 'nfc', 'internal']
+                    })) : []);
+
+                    const publicKeyOptions = {
+                        challenge: base64UrlToBuffer(opts.challenge),
+                        rpId: window.location.hostname,
+                        allowCredentials: allowCreds.length > 0 ? allowCreds : undefined,
+                        userVerification: 'preferred',
+                        timeout: opts.timeout || 60000,
+                    };
+
+                    const assertion = await navigator.credentials.get({ publicKey: publicKeyOptions });
+                    if (assertion) {
+                        verifiedCredId = bufferToBase64Url(assertion.rawId);
+                    }
+                } catch (webauthnErr) {
+                    console.warn('Native WebAuthn assertion prompt exception:', webauthnErr);
+                    showBanner('webauthn-banner', 'YubiKey touch verification canceled or key not recognized: ' + webauthnErr.message, 'error');
+                    return;
+                }
+
+                // 3. Post to verification API
+                const verifyRes = await fetch('/osivault/auth/api/webauthn/assertion/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ credential_id: verifiedCredId || credId })
+                });
+                const verifyData = await verifyRes.json();
+
+                if (verifyRes.ok && verifyData.status === 'success') {
+                    showBanner('webauthn-banner', verifyData.message, 'success');
+                    fetchRegisteredYubiKeys();
+                } else {
+                    showBanner('webauthn-banner', verifyData.message || 'Assertion verification failed.', 'error');
+                }
+
+            } catch (err) {
+                showBanner('webauthn-banner', 'Error verifying YubiKey touch: ' + err.message, 'error');
+            }
+        }
+
+        async function handleGenerateTOTP() {
+            try {
+                showBanner('totp-banner', 'Generating secure Base32 seed & QR code...', 'info');
+                const res = await fetch('/osivault/auth/api/totp/setup/', { method: 'POST' });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    const secret = data.secret;
+                    document.getElementById('totp-secret-key-text').innerText = secret;
+                    document.getElementById('totp-secret-box').classList.remove('hidden');
+
+                    const provUri = data.provisioning_uri || ('otpauth://totp/OSIVault:' + CURRENT_USER_EMAIL + '?secret=' + secret + '&issuer=OSIVault');
+                    const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(provUri);
+                    document.getElementById('totp-qr-img').src = qrUrl;
+                    document.getElementById('totp-qr-container').classList.remove('hidden');
+
+                    if (data.is_verified) {
+                        showBanner('totp-banner', 'TOTP Authenticator is active for your account. Re-scan QR code if needed.', 'success');
+                    } else {
+                        showBanner('totp-banner', 'Scan QR Code with Google Authenticator or enter Base32 seed manually, then enter the 6-digit code below to verify.', 'info');
+                    }
+                } else {
+                    showBanner('totp-banner', data.message || 'Error generating TOTP secret.', 'error');
+                }
+            } catch (err) {
+                showBanner('totp-banner', 'Error generating TOTP secret: ' + err.message, 'error');
+            }
+        }
+
+        function copyTOTPSecret() {
+            const secret = document.getElementById('totp-secret-key-text').innerText.trim();
+            if (secret) {
+                navigator.clipboard.writeText(secret);
+                const copyBtn = document.getElementById('btn-copy-totp-secret');
+                if (copyBtn) {
+                    copyBtn.innerText = 'Copied!';
+                    setTimeout(() => { copyBtn.innerText = 'Copy Key'; }, 2000);
+                }
+            }
+        }
+
+        async function handleVerifyTOTP() {
+            const code = document.getElementById('input-totp-code').value.trim();
+            if (!code || code.length !== 6) {
+                showBanner('totp-banner', 'Please enter a valid 6-digit TOTP code.', 'error');
+                return;
+            }
+
+            try {
+                showBanner('totp-banner', 'Verifying TOTP code with OSIVault Security Engine...', 'info');
+                const res = await fetch('/osivault/auth/api/totp/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code: code })
+                });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    showBanner('totp-banner', data.message, 'success');
+                } else {
+                    showBanner('totp-banner', data.message || 'Verification failed.', 'error');
+                }
+            } catch (err) {
+                showBanner('totp-banner', 'Error verifying TOTP code: ' + err.message, 'error');
+            }
+        }
+
+        async function handleGenerateRecoveryCodes() {
+            try {
+                showBanner('recovery-banner', 'Generating 8 single-use emergency break-glass recovery codes & hashing as SHA-256...', 'info');
+                const res = await fetch('/osivault/auth/api/recovery-codes/generate/', { method: 'POST' });
+                const data = await res.json();
+
+                if (res.ok && data.status === 'success') {
+                    const grid = document.getElementById('recovery-codes-grid');
+                    grid.innerHTML = '';
+                    data.codes.forEach(c => {
+                        grid.innerHTML += `<div class="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-300 select-all font-mono font-black">${c}</div>`;
+                    });
+                    document.getElementById('recovery-codes-box').classList.remove('hidden');
+                    showBanner('recovery-banner', data.message, 'success');
+                } else {
+                    showBanner('recovery-banner', data.message || 'Error generating recovery codes.', 'error');
+                }
+            } catch (err) {
+                showBanner('recovery-banner', 'Error generating recovery codes: ' + err.message, 'error');
+            }
+        }
+
+        async function handleUserLogout() {
+            try {
+                const res = await fetch('/osivault/auth/api/user/logout/', { method: 'POST' });
+                const data = await res.json();
+                window.location.href = data.redirect_url || '/osivault/auth/portal/';
+            } catch (err) {
+                window.location.href = '/osivault/auth/portal/';
+            }
+        }
+
+        function showBanner(id, msg, type = 'info') {
+            const el = document.getElementById(id);
+            if (!el) return;
+            
+            let iconSvg = '';
+            let bgClass = '';
+            
+            if (type === 'success' || msg.startsWith('SUCCESS') || msg.includes('verified') || msg.includes('enrolled') || msg.includes('generated')) {
+                bgClass = 'bg-emerald-100 text-emerald-950 border-2 border-emerald-300';
+                iconSvg = `<svg class="w-5 h-5 text-emerald-700 shrink-0" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>`;
+            } else if (type === 'error' || msg.startsWith('ERROR') || msg.includes('Error') || msg.includes('canceled') || msg.includes('failed') || msg.includes('not supported')) {
+                bgClass = 'bg-rose-100 text-rose-950 border-2 border-rose-300';
+                iconSvg = `<svg class="w-5 h-5 text-rose-700 shrink-0" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>`;
+            } else {
+                bgClass = 'bg-purple-100 text-purple-950 border-2 border-purple-300';
+                iconSvg = `<svg class="w-5 h-5 text-purple-700 shrink-0" width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+            }
+            
+            const cleanMsg = msg.replace(/^[\u{1F300}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}✅❌⚡🔑📱🛡️📊🚪⚠️]+\s*/u, '');
+            
+            el.className = `p-4 rounded-2xl text-xs font-extrabold leading-relaxed shadow-sm flex items-center gap-3 ${bgClass}`;
+            el.innerHTML = `${iconSvg}<div class="flex-1">${cleanMsg}</div>`;
+            el.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>

@@ -1,5 +1,5 @@
 """
-osivault.auth: Second-factor adapters for privileged and ordinary accounts.
+osivault.auth: Second-factor adapters and built-in hardware credential models.
 """
 
 from osivault.auth.adapters import (

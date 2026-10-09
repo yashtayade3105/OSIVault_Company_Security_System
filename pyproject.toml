@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 authors = [
-    { name = "One Smarter Inc. Engineering", email = "security@onesmarter.com" }
+    { name = "Yash Tayade & OSIVault Security Engineering", email = "tayadeyash2005@gmail.com" }
 ]
 keywords = [
     "django",
@@ -21,17 +21,22 @@ keywords = [
     "crypto-agility",
     "post-quantum",
     "hipaa",
-    "tamper-evident"
+    "tamper-evident",
+    "yubikey",
+    "webauthn",
+    "sftp"
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Framework :: Django",
     "Framework :: Django :: 4.2",
     "Framework :: Django :: 5.0",
+    "Framework :: Django :: 6.0",
     "Intended Audience :: Developers",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Security",
     "Topic :: Security :: Cryptography",
     "Topic :: Software Development :: Libraries :: Python Modules"
@@ -39,7 +44,8 @@ classifiers = [
 dependencies = [
     "django>=4.2",
     "cryptography>=42.0.0",
-    "webauthn>=2.1.0"
+    "webauthn>=2.1.0",
+    "paramiko>=3.4.0"
 ]
 
 [project.optional-dependencies]
@@ -47,16 +53,15 @@ dev = [
     "pytest>=8.0.0",
     "pytest-django>=4.8.0",
     "pytest-cov>=4.1.0",
-    "psycopg2-binary>=2.9.0",
     "build>=1.0.0",
     "twine>=5.0.0"
 ]
 
 [project.urls]
-Homepage = "https://github.com/OneSmarterInc/OSIVault"
-Documentation = "https://github.com/OneSmarterInc/OSIVault#readme"
-Repository = "https://github.com/OneSmarterInc/OSIVault.git"
-Issues = "https://github.com/OneSmarterInc/OSIVault/issues"
+Homepage = "https://github.com/yashtayade3105/OSIVault_Company_Security_System"
+Documentation = "https://github.com/yashtayade3105/OSIVault_Company_Security_System#readme"
+Repository = "https://github.com/yashtayade3105/OSIVault_Company_Security_System.git"
+Issues = "https://github.com/yashtayade3105/OSIVault_Company_Security_System/issues"
 
 [tool.setuptools.packages.find]
 where = ["."]

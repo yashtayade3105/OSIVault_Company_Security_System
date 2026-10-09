@@ -62,6 +62,17 @@ def jwks_document(keys: list[tuple[Any, str, str]]) -> dict[str, list[dict[str, 
     return {"keys": jwks_keys}
 
 
+_DEFAULT_SYSTEM_KEY: Any = None
+_DEFAULT_SYSTEM_KID: str = "default"
+
+
+def _get_default_private_key() -> tuple[Any, str]:
+    global _DEFAULT_SYSTEM_KEY, _DEFAULT_SYSTEM_KID
+    if _DEFAULT_SYSTEM_KEY is None:
+        _DEFAULT_SYSTEM_KEY, _, _DEFAULT_SYSTEM_KID = rotate()
+    return _DEFAULT_SYSTEM_KEY, _DEFAULT_SYSTEM_KID
+
+
 def issue(
     claims: dict[str, Any],
     private_key: Any = None,
@@ -74,6 +85,11 @@ def issue(
     """
     if alg not in ALLOWED_SIGNATURE_ALGORITHMS:
         raise TokenError(f"Allowlist check failed: Algorithm '{alg}' is disallowed.")
+
+    if private_key is None:
+        private_key, auto_kid = _get_default_private_key()
+        if key_id == "default":
+            key_id = auto_kid
 
     now = int(time.time())
     token_claims = claims.copy()
@@ -155,7 +171,10 @@ def verify(
         public_key = public_key_or_jwks
 
     if public_key is None:
-        raise TokenError(f"Unable to resolve verification key for key_id '{kid}'")
+        if _DEFAULT_SYSTEM_KEY is not None:
+            public_key = _DEFAULT_SYSTEM_KEY.public_key()
+        else:
+            raise TokenError(f"Unable to resolve verification key for key_id '{kid}'")
 
     signing_input = f"{header_b64}.{payload_b64}"
     envelope_str = f"OSV1-SIG${alg}${kid}$SHA256${base64.urlsafe_b64encode(signing_input.encode('utf-8')).decode('ascii').rstrip('=')}${sig_b64}"

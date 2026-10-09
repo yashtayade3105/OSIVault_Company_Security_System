@@ -16,11 +16,33 @@ ALLOWED_HOSTS = ["*"]
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.sessions",
     "osivault.audit",
+    "osivault.auth",
+    "osivault.sftp",
     "tests",
 ]
 
-MIDDLEWARE = []
+MIDDLEWARE = [
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+]
+
+ROOT_URLCONF = "tests.urls"
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+            ],
+        },
+    },
+]
 
 # Support PostgreSQL via DATABASE_URL if set, fallback to SQLite in-memory for basic unit tests
 DATABASE_URL = os.environ.get("DATABASE_URL")

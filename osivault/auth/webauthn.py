@@ -26,7 +26,7 @@ def generate_registration_options(
     rp_name: str = "OSIVault Core",
 ) -> Dict[str, Any]:
     """
-    Generate FIDO2 WebAuthn key registration challenge options.
+    Generate FIDO2 WebAuthn key registration challenge options for YubiKey Hardware.
     `rp_id` must be passed explicitly by caller.
     """
     if isinstance(user_id, str):
@@ -49,7 +49,14 @@ def generate_registration_options(
         "rpName": rp_name,
         "userId": bytes_to_base64url(uid_bytes),
         "username": username,
-        "raw_options": options,
+        "pubKeyCredParams": [{"alg": -7, "type": "public-key"}, {"alg": -257, "type": "public-key"}],
+        "timeout": getattr(options, "timeout", 60000),
+        "attestation": "none",
+        "authenticatorSelection": {
+            "authenticatorAttachment": "cross-platform",
+            "userVerification": "preferred",
+            "residentKey": "discouraged",
+        }
     }
 
 
@@ -83,7 +90,6 @@ def verify_registration_response(
         "credential_id": bytes_to_base64url(verification.credential_id),
         "public_key": bytes_to_base64url(verification.credential_public_key),
         "sign_count": verification.sign_count,
-        "verification": verification,
     }
 
 
@@ -113,13 +119,16 @@ def generate_assertion_options(
 
     return {
         "challenge": bytes_to_base64url(options.challenge),
-        "timeout": options.timeout,
+        "timeout": getattr(options, "timeout", 60000),
         "rpId": rp_id,
         "allowCredentials": [
-            {"id": cid, "type": "public-key"}
+            {
+                "id": cid,
+                "type": "public-key",
+                "transports": ["usb", "nfc"]
+            }
             for cid in cids
         ],
-        "raw_options": options,
     }
 
 

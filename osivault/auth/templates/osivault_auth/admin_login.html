@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OSIVault | Admin Sign In</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #0d131f;
+            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-center p-4 text-slate-200">
+
+    <div class="mb-6 text-center tracking-widest text-xs font-mono uppercase text-slate-500 font-bold">
+        ONESMARTER <span class="text-slate-700">/</span> <span class="text-slate-400">ADMIN</span>
+    </div>
+
+    <!-- Admin Sign In Container -->
+    <div class="w-full max-w-md bg-white text-slate-900 rounded-xl shadow-2xl overflow-hidden border border-slate-200">
+        <div class="p-8 space-y-6">
+            <div class="space-y-1">
+                <h1 class="text-2xl font-bold text-slate-900">Admin Sign In</h1>
+                <p class="text-xs text-slate-500 leading-relaxed">
+                    Administrator access to client onboarding, compliance evidence, and integrations.
+                </p>
+            </div>
+
+            <!-- Login Form -->
+            <form id="admin-login-form" onsubmit="handleStandardLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Work email</label>
+                    <input 
+                        type="email" 
+                        id="email" 
+                        required 
+                        value="admin@onesmarter.com" 
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:outline-none transition-all"
+                    />
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-700 mb-1">Password</label>
+                    <input 
+                        type="password" 
+                        id="password" 
+                        required 
+                        placeholder="••••••••••••" 
+                        class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-900 focus:outline-none transition-all"
+                    />
+                </div>
+
+                <button 
+                    type="submit" 
+                    class="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white font-semibold text-xs rounded-lg shadow-md transition-all"
+                >
+                    Continue
+                </button>
+            </form>
+
+            <!-- OR Divider -->
+            <div class="relative flex py-1 items-center">
+                <div class="flex-grow border-t border-slate-200"></div>
+                <span class="flex-shrink mx-4 text-[10px] text-slate-400 uppercase font-mono tracking-widest font-semibold">OR</span>
+                <div class="flex-grow border-t border-slate-200"></div>
+            </div>
+
+            <!-- WebAuthn Security Key Passkey Button -->
+            <button 
+                type="button" 
+                onclick="handleWebAuthnLogin()" 
+                id="security-key-btn"
+                class="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 font-semibold text-xs border border-slate-300 rounded-lg transition-all flex items-center justify-center gap-2 shadow-sm"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4.1a1 1 0 0 0-1.4 0l-2.1 2.1a1 1 0 0 0 0 1.4z"/>
+                    <path d="m15.5 7.5-3 3"/>
+                    <path d="M10.5 12.5a5 5 0 1 0-7 7 5 5 0 0 0 7-7z"/>
+                </svg>
+                <span>Continue with Security Key</span>
+            </button>
+
+            <!-- Status Banner -->
+            <div id="status-message" class="hidden text-xs p-3 rounded-lg font-medium text-center"></div>
+        </div>
+
+        <div class="bg-slate-50 px-8 py-4 border-t border-slate-100 text-center space-y-2">
+            <p class="text-[11px] text-slate-500">Access is restricted to authorized OneSmarter administrative staff.</p>
+            <a href="/" class="inline-block text-[11px] text-slate-600 hover:text-slate-900 font-medium">← Back to Client Portal</a>
+        </div>
+    </div>
+
+    <script>
+        const arrayBufferToBase64Url = (buffer) => {
+            if (!buffer) return '';
+            const bytes = new Uint8Array(buffer);
+            let binary = '';
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+        };
+
+        async function handleStandardLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            showStatus('Authenticating user...', 'bg-slate-100 text-slate-700');
+
+            try {
+                const res = await fetch('/api/auth/login/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: email.split('@')[0], password })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    showStatus('Login successful! Redirecting...', 'bg-emerald-100 text-emerald-800');
+                    setTimeout(() => window.location.href = '/', 1000);
+                } else {
+                    showStatus(data.message || 'Invalid credentials', 'bg-rose-100 text-rose-800');
+                }
+            } catch (err) {
+                showStatus('Connection error', 'bg-rose-100 text-rose-800');
+            }
+        }
+
+        async function handleWebAuthnLogin() {
+            const email = document.getElementById('email').value;
+            const username = email ? email.split('@')[0] : 'admin';
+            showStatus('Initiating WebAuthn FIDO2 ceremony...', 'bg-cyan-50 text-cyan-800');
+
+            try {
+                const res = await fetch('/api/auth/webauthn/authenticate/begin/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, rp_id: window.location.hostname })
+                });
+                const options = await res.json();
+
+                if (!window.PublicKeyCredential) {
+                    showStatus('WebAuthn is not supported on this browser', 'bg-rose-100 text-rose-800');
+                    return;
+                }
+
+                showStatus('Insert & Touch your physical YubiKey or Security Key...', 'bg-blue-50 text-blue-800');
+
+                const pad = (str) => str + '='.repeat((4 - (str.length % 4)) % 4);
+                const base64 = pad(options.challenge.replace(/-/g, '+').replace(/_/g, '/'));
+                const challengeBuffer = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+
+                const assertion = await navigator.credentials.get({
+                    publicKey: {
+                        challenge: challengeBuffer,
+                        rpId: options.rpId,
+                        timeout: 60000,
+                        userVerification: 'preferred'
+                    }
+                });
+
+                showStatus('Verifying hardware signature with osivault.auth...', 'bg-indigo-50 text-indigo-800');
+
+                const verifyRes = await fetch('/api/auth/webauthn/authenticate/verify/', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username,
+                        response_data: {
+                            id: assertion.id,
+                            rawId: assertion.id,
+                            type: assertion.type,
+                            authenticatorData: arrayBufferToBase64Url(assertion.response.authenticatorData),
+                            clientDataJSON: arrayBufferToBase64Url(assertion.response.clientDataJSON),
+                            signature: arrayBufferToBase64Url(assertion.response.signature)
+                        },
+                        expected_challenge: options.challenge,
+                        rp_id: window.location.hostname,
+                        origin: window.location.origin
+                    })
+                });
+
+                const verifyData = await verifyRes.json();
+                if (verifyRes.ok && verifyData.status === 'success') {
+                    showStatus('Hardware YubiKey Verified! Access Granted.', 'bg-emerald-100 text-emerald-800');
+                    setTimeout(() => window.location.href = '/', 1000);
+                } else {
+                    showStatus(verifyData.message || 'YubiKey verification failed', 'bg-rose-100 text-rose-800');
+                }
+            } catch (err) {
+                showStatus('Physical YubiKey touch cancelled or timed out', 'bg-rose-100 text-rose-800');
+            }
+        }
+
+        function showStatus(msg, className) {
+            const el = document.getElementById('status-message');
+            el.className = `text-xs p-3 rounded-lg font-medium text-center ${className}`;
+            el.innerText = msg;
+            el.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
