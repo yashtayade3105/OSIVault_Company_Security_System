@@ -8,6 +8,7 @@ from osivault.sign.crypto import (
     Envelope,
     SignatureVerificationError,
     ALLOWED_SIGNATURE_ALGORITHMS,
+    SIG_HEADER_PREFIX,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "Envelope",
     "SignatureVerificationError",
     "ALLOWED_SIGNATURE_ALGORITHMS",
+    "SIG_HEADER_PREFIX",
 ]

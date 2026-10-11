@@ -130,10 +130,6 @@ def verify(envelope_str: str, key_resolver=None, public_key=None) -> Envelope:
         raise SignatureVerificationError("Signature verification failed: invalid signature or tampered payload.")
     except Exception as e:
         raise SignatureVerificationError(f"Cryptographic verification error: {str(e)}") from e
-    except InvalidSignature:
-        raise SignatureVerificationError("Signature verification failed: invalid signature or tampered payload.")
-    except Exception as e:
-        raise SignatureVerificationError(f"Cryptographic verification error: {str(e)}") from e
 
     return Envelope(
         sig_alg=alg,

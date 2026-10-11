@@ -49,8 +49,20 @@ def jwks_document(keys: list[tuple[Any, str, str]]) -> dict[str, list[dict[str, 
                 "n": n_b64,
                 "e": e_b64,
             })
+        elif hasattr(pub_key, "public_bytes_raw"):
+            # RFC 8037 compliant Ed25519 OKP representation
+            raw_bytes = pub_key.public_bytes_raw()
+            x_b64 = base64.urlsafe_b64encode(raw_bytes).decode("ascii").rstrip("=")
+            jwks_keys.append({
+                "kty": "OKP",
+                "crv": "Ed25519",
+                "use": "sig",
+                "alg": alg,
+                "kid": kid,
+                "x": x_b64,
+            })
         else:
-            # Ed25519 or other key types
+            # Fallback for other key types
             jwks_keys.append({
                 "kty": "OKP",
                 "crv": "Ed25519",
@@ -162,15 +174,22 @@ def verify(
     if isinstance(public_key_or_jwks, dict) and "keys" in public_key_or_jwks:
         for k in public_key_or_jwks["keys"]:
             if k.get("kid") == kid or len(public_key_or_jwks["keys"]) == 1:
-                if k.get("kty") == "RSA":
+                if k.get("kty") == "RSA" and "n" in k and "e" in k:
                     n = _base64url_to_int(k["n"])
                     e = _base64url_to_int(k["e"])
                     public_key = rsa.RSAPublicNumbers(e, n).public_key()
                     break
-    else:
+                elif k.get("kty") == "OKP" and k.get("crv") == "Ed25519" and "x" in k:
+                    from cryptography.hazmat.primitives.asymmetric import ed25519
+                    x_pad = "=" * (-len(k["x"]) % 4)
+                    raw_bytes = base64.urlsafe_b64decode(k["x"] + x_pad)
+                    public_key = ed25519.Ed25519PublicKey.from_public_bytes(raw_bytes)
+                    break
+        if public_key is None:
+            raise TokenError(f"Unable to resolve verification key for key_id '{kid}' from provided JWKS.")
+    elif public_key_or_jwks is not None:
         public_key = public_key_or_jwks
-
-    if public_key is None:
+    else:
         if _DEFAULT_SYSTEM_KEY is not None:
             public_key = _DEFAULT_SYSTEM_KEY.public_key()
         else:

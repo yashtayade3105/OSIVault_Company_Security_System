@@ -218,7 +218,7 @@ def verify_chain(
 
     expected_previous_hash = ""
 
-    for entry in queryset:
+    for entry in queryset.iterator(chunk_size=2000):
         total_count += 1
 
         # 1. Verify previous_hash linkage
