@@ -53,7 +53,7 @@ def canonical_json(data: dict) -> bytes:
     """
     Produce canonical JSON representation with sorted keys, compact separators, and UTF-8 encoding.
     """
-    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
+    return json.dumps(data, sort_keys=True, separators=(",", ":"), ensure_ascii=True, default=str).encode("utf-8")
 
 
 def format_iso_timestamp(dt: datetime) -> str:

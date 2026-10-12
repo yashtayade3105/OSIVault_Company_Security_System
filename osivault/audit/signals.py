@@ -56,12 +56,12 @@ def serialize_model_instance(instance) -> dict:
     for field in instance._meta.fields:
         try:
             val = getattr(instance, field.name)
+            if hasattr(val, "pk"):
+                val = val.pk
             if isinstance(val, float) and (math.isnan(val) or math.isinf(val)):
                 val = None
             elif hasattr(val, "isoformat"):
                 val = val.isoformat()
-            elif hasattr(val, "pk"):
-                val = val.pk
             elif not isinstance(val, (int, float, str, bool, type(None), dict, list)):
                 val = str(val)
             data[field.name] = val
