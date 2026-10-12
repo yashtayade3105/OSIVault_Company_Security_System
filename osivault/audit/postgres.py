@@ -13,6 +13,9 @@ def install_postgres_immutability_trigger(table_name: str) -> None:
     if not table_name:
         return
 
+    if "postgres" not in connection.vendor.lower():
+        return
+
     trigger_function = f"osivault_prevent_immutability_{table_name}"
     trigger_name = f"trg_osivault_immutable_{table_name}"
 
